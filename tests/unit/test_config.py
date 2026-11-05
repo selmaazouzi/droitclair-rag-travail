@@ -1,0 +1,46 @@
+import pytest
+
+from app.config import Settings
+
+
+def test_defaults_match_architecture() -> None:
+    settings = Settings(_env_file=None)  # type: ignore[call-arg]
+
+    assert settings.llm_provider == "mistral"
+    assert settings.embedding_model == "BAAI/bge-m3"
+    assert settings.reranker_model == "BAAI/bge-reranker-v2-m3"
+    assert settings.retrieval_top_k_lexical == 30
+    assert settings.retrieval_top_k_dense == 30
+    assert settings.rrf_k == 60
+    assert settings.rerank_top_n == 6
+    assert settings.prompt_system_version == "system_v1"
+    assert settings.enable_lexical and settings.enable_rerank and settings.enable_query_rewrite
+
+
+def test_environment_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LLM_PROVIDER", "ollama")
+    monkeypatch.setenv("ENABLE_RERANK", "false")
+    monkeypatch.setenv("RERANK_TOP_N", "4")
+
+    settings = Settings(_env_file=None)  # type: ignore[call-arg]
+
+    assert settings.llm_provider == "ollama"
+    assert settings.enable_rerank is False
+    assert settings.rerank_top_n == 4
+
+
+def test_secrets_are_not_leaked_in_repr(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MISTRAL_API_KEY", "sk-very-secret")
+
+    settings = Settings(_env_file=None)  # type: ignore[call-arg]
+
+    assert "sk-very-secret" not in repr(settings)
+    assert settings.mistral_api_key is not None
+    assert settings.mistral_api_key.get_secret_value() == "sk-very-secret"
+
+
+def test_rejects_unknown_provider(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LLM_PROVIDER", "unknown")
+
+    with pytest.raises(ValueError, match="llm_provider"):
+        Settings(_env_file=None)  # type: ignore[call-arg]

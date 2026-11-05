@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+build/
+dist/
+
+# Tooling caches
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Raw source dumps (re-downloadable)
+data/
+
+# Claude Code (local only)
+CLAUDE.md
+CLAUDE.local.md
+.claude/
+
+# Logs and notebook checkpoints
+*.log
+.ipynb_checkpoints/
+
+# Chainlit
+.chainlit/
+.files/
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
