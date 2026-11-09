@@ -1,0 +1,132 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 740" width="1200" height="740" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#198754"/>
+    </marker>
+    <style>
+      .box { fill: #ffffff; stroke: #198754; stroke-width: 1.5; }
+      .title { font-size: 14px; font-weight: 700; fill: #1f2937; text-anchor: middle; }
+      .line { font-size: 13px; fill: #4b5563; text-anchor: middle; }
+      .cmd { font-family: SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; font-weight: 700; fill: #198754; text-anchor: middle; }
+      .flow { stroke: #198754; stroke-width: 2; fill: none; }
+      .lane-title { font-size: 16px; font-weight: 700; fill: #146c43; }
+      .lane-note { font-size: 13px; fill: #6b7280; text-anchor: end; }
+    </style>
+  </defs>
+
+  <!-- Card background: readable in GitHub light and dark themes -->
+  <rect x="0.5" y="0.5" width="1199" height="739" rx="16" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="40" y="46" font-size="22" font-weight="700" fill="#111827">Comment fonctionne DroitClair</text>
+
+  <!-- ============ Lane 1: data preparation ============ -->
+  <rect x="20" y="70" width="1160" height="210" rx="12" fill="#eef7f1"/>
+  <text x="40" y="100" class="lane-title">① Préparation des données</text>
+  <text x="1160" y="100" class="lane-note">hors ligne · à chaque mise à jour des textes</text>
+
+  <rect class="box" x="40" y="122" width="180" height="112" rx="10"/>
+  <text class="title" x="130" y="152">API Légifrance</text>
+  <text class="line" x="130" y="178">Code du travail officiel</text>
+  <text class="line" x="130" y="198">(DILA, portail PISTE)</text>
+
+  <rect class="box" x="275" y="122" width="180" height="112" rx="10"/>
+  <text class="title" x="365" y="152">Articles bruts</text>
+  <text class="line" x="365" y="178">686 articles en vigueur</text>
+  <text class="line" x="365" y="198">réponses JSON de l'API</text>
+
+  <rect class="box" x="510" y="122" width="180" height="112" rx="10"/>
+  <text class="title" x="600" y="152">Articles nettoyés</text>
+  <text class="line" x="600" y="178">alinéas en texte brut,</text>
+  <text class="line" x="600" y="198">position dans le code</text>
+
+  <rect class="box" x="745" y="122" width="180" height="112" rx="10" fill="#e3f2ea"/>
+  <text class="title" x="835" y="152">PostgreSQL + pgvector</text>
+  <text class="line" x="835" y="178">1 article = 1 passage</text>
+  <text class="line" x="835" y="198">+ empreinte SHA-256</text>
+
+  <rect class="box" x="980" y="122" width="180" height="112" rx="10"/>
+  <text class="title" x="1070" y="152">Modèle bge-m3</text>
+  <text class="line" x="1070" y="178">chaque passage devient</text>
+  <text class="line" x="1070" y="198">un vecteur de</text>
+  <text class="line" x="1070" y="218">1 024 nombres</text>
+
+  <!-- Lane 1 arrows, labelled with the CLI commands -->
+  <text class="cmd" x="247.5" y="168">fetch</text>
+  <line class="flow" x1="221" y1="180" x2="273" y2="180" marker-end="url(#arrow)"/>
+  <text class="cmd" x="482.5" y="168">clean</text>
+  <line class="flow" x1="456" y1="180" x2="508" y2="180" marker-end="url(#arrow)"/>
+  <text class="cmd" x="717.5" y="168">run</text>
+  <line class="flow" x1="691" y1="180" x2="743" y2="180" marker-end="url(#arrow)"/>
+  <text class="cmd" x="952.5" y="168">embed</text>
+  <line class="flow" x1="928" y1="180" x2="978" y2="180" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+
+  <!-- ============ Lane 2: answering a question ============ -->
+  <rect x="20" y="300" width="1160" height="420" rx="12" fill="#f4f6f8"/>
+  <text x="40" y="330" class="lane-title">② Réponse à une question</text>
+  <text x="1160" y="330" class="lane-note">en ligne · environ 2 secondes</text>
+
+  <!-- User interface -->
+  <rect class="box" x="40" y="352" width="190" height="306" rx="10"/>
+  <text class="title" x="135" y="384">Interface Chainlit</text>
+  <text class="line" x="135" y="412">Le salarié pose</text>
+  <text class="line" x="135" y="432">sa question.</text>
+  <text class="line" x="135" y="478" font-style="italic" fill="#146c43">« Puis-je changer d'avis</text>
+  <text class="line" x="135" y="498" font-style="italic" fill="#146c43">après une rupture</text>
+  <text class="line" x="135" y="518" font-style="italic" fill="#146c43">conventionnelle ? »</text>
+  <text class="line" x="135" y="560">La réponse s'affiche</text>
+  <text class="line" x="135" y="580">mot à mot, avec</text>
+  <text class="line" x="135" y="600">ses sources cliquables.</text>
+
+  <!-- API container -->
+  <rect x="270" y="352" width="890" height="306" rx="10" fill="#ffffff" stroke="#9ca3af" stroke-dasharray="6 4"/>
+  <text x="290" y="380" font-family="SFMono-Regular, Menlo, Consolas, monospace" font-size="13" font-weight="700" fill="#374151">API FastAPI · POST /chat</text>
+
+  <rect class="box" x="290" y="420" width="156" height="130" rx="10"/>
+  <text class="title" x="368" y="450">1. Vectoriser</text>
+  <text class="line" x="368" y="476">la question avec</text>
+  <text class="line" x="368" y="496">le même bge-m3</text>
+
+  <rect class="box" x="466" y="420" width="156" height="130" rx="10"/>
+  <text class="title" x="544" y="450">2. Chercher</text>
+  <text class="line" x="544" y="476">les 6 articles les</text>
+  <text class="line" x="544" y="496">plus proches</text>
+  <text class="line" x="544" y="516">(similarité cosinus)</text>
+
+  <rect class="box" x="642" y="420" width="156" height="130" rx="10"/>
+  <text class="title" x="720" y="450">3. Construire</text>
+  <text class="line" x="720" y="476">le prompt : règles</text>
+  <text class="line" x="720" y="496">+ sources numérotées</text>
+  <text class="line" x="720" y="516">[1] … [6]</text>
+
+  <rect class="box" x="818" y="420" width="156" height="130" rx="10"/>
+  <text class="title" x="896" y="450">4. Générer</text>
+  <text class="line" x="896" y="476">avec le LLM :</text>
+  <text class="line" x="896" y="496">Mistral Small</text>
+  <text class="line" x="896" y="516">(OpenRouter) ou</text>
+  <text class="line" x="896" y="536">Gemma 4 (Ollama)</text>
+
+  <rect class="box" x="994" y="420" width="156" height="130" rx="10"/>
+  <text class="title" x="1072" y="450">5. Vérifier</text>
+  <text class="line" x="1072" y="476">les citations [n],</text>
+  <text class="line" x="1072" y="496">retirer celles qui</text>
+  <text class="line" x="1072" y="516">ne renvoient à rien</text>
+
+  <!-- Question in -->
+  <line class="flow" x1="231" y1="485" x2="288" y2="485" marker-end="url(#arrow)"/>
+  <!-- Steps chain -->
+  <line class="flow" x1="447" y1="485" x2="464" y2="485" marker-end="url(#arrow)"/>
+  <line class="flow" x1="623" y1="485" x2="640" y2="485" marker-end="url(#arrow)"/>
+  <line class="flow" x1="799" y1="485" x2="816" y2="485" marker-end="url(#arrow)"/>
+  <line class="flow" x1="975" y1="485" x2="992" y2="485" marker-end="url(#arrow)"/>
+
+  <!-- Search reads the database (lane 1) -->
+  <path class="flow" d="M544,418 V292 H835 V237" marker-end="url(#arrow)" stroke-dasharray="5 4"/>
+  <text x="845" y="262" font-size="12" fill="#146c43">lit les passages et leurs vecteurs</text>
+
+  <!-- Answer streamed back -->
+  <path class="flow" d="M1072,551 V612 H233" marker-end="url(#arrow)"/>
+  <rect x="470" y="598" width="380" height="24" fill="#ffffff"/>
+  <text class="cmd" x="660" y="615">réponse en flux (SSE) · sources · coût</text>
+
+  <!-- Key principle -->
+  <text x="40" y="700" font-size="13" font-style="italic" fill="#4b5563">Le LLM ne voit que les 6 articles fournis : il doit répondre uniquement à partir d'eux et citer chacun de ceux qu'il utilise.</text>
+</svg>

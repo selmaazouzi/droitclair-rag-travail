@@ -56,22 +56,9 @@ L'étape « 6 articles du Code trouvés » se déplie : on voit ce que le modèl
 
 ## Fonctionnement
 
-```mermaid
-flowchart LR
-    subgraph ING["Ingestion (hors ligne)"]
-        A["API Légifrance<br/>(PISTE)"] -->|fetch| B["Articles bruts<br/>(JSON)"]
-        B -->|clean| C["Articles nettoyés"]
-        C -->|run| D[("PostgreSQL<br/>+ pgvector")]
-        D -->|"embed (bge-m3)"| D
-    end
-    subgraph REQ["Question d'un utilisateur"]
-        U["Interface<br/>Chainlit"] -->|POST /chat| F["API FastAPI"]
-        F -->|"6 articles les plus proches"| D
-        F -->|"prompt + sources numérotées"| L["LLM<br/>OpenRouter / Ollama"]
-        L -->|réponse en flux| F
-        F -->|"SSE : texte, sources, coût"| U
-    end
-```
+<p align="center">
+  <img src="docs/images/fonctionnement.svg" width="900" alt="Schéma de fonctionnement de DroitClair : préparation des données (API Légifrance, articles bruts, articles nettoyés, PostgreSQL + pgvector, vecteurs bge-m3) puis réponse à une question (vectoriser, chercher les 6 articles les plus proches, construire le prompt, générer avec le LLM, vérifier les citations)">
+</p>
 
 **Ingestion.** Le sommaire du Code du travail est téléchargé, filtré sur le périmètre (livre II : formation et exécution du contrat, rupture du CDI, CDD ; articles législatifs L et réglementaires R/D en vigueur), puis chaque article est récupéré, converti du HTML en alinéas propres et enregistré avec sa position dans le code. Une empreinte SHA-256 par article rend l'ingestion **idempotente** : une relance ne modifie rien, une nouvelle version d'article est détectée et seule elle est retraitée, y compris son vecteur.
 
