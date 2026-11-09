@@ -106,7 +106,8 @@ droitclair-rag-travail/
 ├── pyproject.toml
 ├── .env.example
 ├── docs/
-│   └── ARCHITECTURE.md          # ce document
+│   ├── ARCHITECTURE.md          # ce document
+│   └── STRUCTURE.md             # rôle de chaque fichier de code existant
 ├── ingestion/
 │   ├── __init__.py
 │   ├── cli.py                   # point d'entrée : python -m ingestion.cli run
@@ -271,9 +272,28 @@ Le schéma est créé via des migrations Alembic, pas à la main.
 
 ## 9. Pipeline d'ingestion
 
-Commande : `python -m ingestion.cli run [--dry-run] [--only articles|fiches] [--date AAAA-MM-JJ]`
+L'ingestion se fait en trois étapes, une par dossier ; seule la première utilise le réseau :
 
-`--dry-run` exécute toute la chaîne, y compris la comparaison avec la base, dans une transaction annulée à la fin : on voit ce qui changerait sans rien écrire. `--date` choisit la version des textes en vigueur à cette date (par défaut : aujourd'hui).
+```
+python -m ingestion.cli fetch [--date AAAA-MM-JJ] [--force]   # API -> articles_bruts/ (puis clean)
+python -m ingestion.cli clean                                 # articles_bruts/ -> articles/
+python -m ingestion.cli run [--dry-run] [--only articles]     # articles/ -> PostgreSQL
+```
+
+Instantané dans `data/legifrance/code_travail/` :
+
+| Fichier | Écrit par | Contenu |
+|---|---|---|
+| `manifest.json` | `fetch` | date de vigueur demandée, date de téléchargement, nombre d'articles |
+| `toc.json` | `fetch` | sommaire complet du code (structure, sans texte) |
+| `articles_bruts/<id>.json` | `fetch` | réponse brute de `getArticle`, **tous les champs** (52), une par version d'article |
+| `articles/<numéro>.json` | `clean` | article **nettoyé** : seulement ce qui est indexé (identifiant stable, numéro, titre, URL, date d'entrée en vigueur, position dans le code, alinéas en texte brut, note) |
+
+- `fetch` réutilise les fichiers bruts déjà présents (une version d'article ne change jamais), sauf `--force`, supprime ceux des versions sorties du périmètre, puis lance `clean`. `--date` choisit la version des textes en vigueur à cette date (par défaut : aujourd'hui).
+- Les fichiers bruts sont conservés intégralement : des champs aujourd'hui inutilisés pourront servir plus tard (`lienConcordes` pour les anciens numéros d'articles, `lienCitations`, historique des versions) sans retélécharger.
+- `clean` se relance seul après une modification du code de nettoyage (`ingestion/html_text.py`, `parse_article`).
+- `run` lit uniquement `articles/` ; il refuse de s'exécuter si leur nombre diffère de celui du `manifest.json` (nettoyage oublié). `--dry-run` exécute toute la chaîne, y compris la comparaison avec la base, dans une transaction annulée à la fin.
+- `data/` n'est pas versionné ; la date de l'instantané (`manifest.json`) sert pour la mention « mise à jour le … » exigée par la Licence Ouverte.
 
 ### 9.1 Filtrage du périmètre
 
@@ -300,7 +320,7 @@ Prévoir aussi `extract_article_refs(text: str) -> list[str]` qui trouve toutes 
 
 ### 9.3 Chunking
 
-- **Articles** : un article = un chunk. Si un article dépasse ~800 tokens, découpage par alinéa avec un chevauchement d'un alinéa.
+- **Articles** : un article = un chunk, **sans découpage** : le nombre de chunks est égal au nombre d'articles (686). Le plus long article du périmètre (L1233-58) fait environ 1 700 tokens, bien en dessous de la limite de `bge-m3` (8 192). Le découpage par alinéa avec chevauchement d'un alinéa reste disponible via `CHUNK_MAX_TOKENS` (par exemple 800), pour une évaluation comparative.
 - **Fiches** : découpage par section (titres de la fiche), cible 300 à 600 tokens.
 - **Chaque chunk commence par un en-tête** :
 
@@ -314,11 +334,11 @@ NOTA : <note de l'article, s'il y en a une>
 - L'en-tête reprend les **titres complets** des sections : ils portent du sens (« Rupture d'un commun accord… ») utile aux recherches lexicale et vectorielle. À réévaluer en phase 4 si le bruit l'emporte.
 - La **note** (`nota`) de l'article est incluse : elle précise souvent les conditions d'entrée en vigueur.
 - Le tableau de L1235-3 (barème des indemnités) est restitué ligne par ligne, cellules séparées par « | ».
-- Le nombre de tokens est **estimé** (3,5 caractères par token) tant que le tokenizer de `bge-m3` n'est pas branché (phase 3). Résultat au 5 novembre 2026 : 686 articles → 696 chunks, 9 articles découpés, médiane d'environ 250 tokens par chunk.
+- Le nombre de tokens est **estimé** (3,5 caractères par token) tant que le tokenizer de `bge-m3` n'est pas branché (phase 3). Résultat sur l'instantané du 5 novembre 2026 : 686 articles → 686 chunks, médiane d'environ 250 tokens, maximum environ 1 700.
 
 ### 9.4 Indexation incrémentale
 
-1. Calculer le `content_hash` de chaque document.
+1. Calculer l'empreinte de chaque document (`documents.content_hash`) : SHA-256 du document normalisé **et des chunks qui en sont tirés**. Un changement de réglage du découpage modifie donc l'empreinte et provoque le re-découpage des documents concernés.
 2. Comparer avec la base : nouveau → insérer ; hash différent → remplacer document et chunks ; absent de la source → supprimer.
 3. Les chunks nouveaux ou modifiés sont enregistrés avec un embedding NULL ; l'étape d'embedding ne calcule que ceux-là.
 4. Enregistrer les compteurs dans `ingestion_runs` et générer un `index_version`. L'`index_version` est une empreinte de l'ensemble `(source_id, content_hash)` : un contenu identique donne la même version.
@@ -500,6 +520,8 @@ LANGFUSE_PUBLIC_KEY=
 LANGFUSE_SECRET_KEY=
 LANGFUSE_HOST=
 RATE_LIMIT_PER_MINUTE=20
+DATA_DIR=data                   # instantanés bruts écrits par `ingestion.cli fetch`
+CHUNK_MAX_TOKENS=               # vide : un article = un chunk
 ```
 
 Chaque étape du pipeline doit pouvoir être désactivée par configuration (`ENABLE_RERANK`, `ENABLE_LEXICAL`, `ENABLE_QUERY_REWRITE`) pour les évaluations comparatives.

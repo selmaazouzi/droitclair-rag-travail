@@ -1,7 +1,8 @@
 """Split documents into retrieval chunks (ARCHITECTURE §9.3).
 
-- One article = one chunk. Above ``max_tokens``, split on alinéa boundaries with an
-  overlap of one alinéa; an alinéa is never cut in the middle.
+- One article = one chunk (default). Optionally, above ``max_tokens``, split on alinéa
+  boundaries with an overlap of one alinéa; an alinéa is never cut in the middle.
+  bge-m3 accepts up to 8192 tokens, far above the longest article in scope.
 - Every chunk starts with a header naming the source and its position in the code.
 
 Token counts are approximated until the embedding tokenizer is wired in (phase 3):
@@ -16,7 +17,6 @@ from ingestion.documents import SourceDocument, SourceType
 
 TokenCounter = Callable[[str], int]
 
-DEFAULT_MAX_TOKENS = 800
 CHARS_PER_TOKEN = 3.5
 
 _SOURCE_LABELS: dict[SourceType, str] = {
@@ -74,13 +74,13 @@ def _group_with_overlap(units: list[str], budget: int, count: TokenCounter) -> l
 def chunk_document(
     doc: SourceDocument,
     *,
-    max_tokens: int = DEFAULT_MAX_TOKENS,
+    max_tokens: int | None = None,
     count_tokens: TokenCounter = approx_token_count,
 ) -> list[Chunk]:
     header = chunk_header(doc)
     units = _body_units(doc)
     whole = "\n".join([header, *units])
-    if count_tokens(whole) <= max_tokens or len(units) == 1:
+    if max_tokens is None or len(units) == 1 or count_tokens(whole) <= max_tokens:
         return [Chunk(index=0, content=whole)]
 
     budget = max(1, max_tokens - count_tokens(header + "\n"))

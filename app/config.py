@@ -5,6 +5,7 @@ configurations without code changes (see docs/ARCHITECTURE.md §15).
 """
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
 from pydantic import Field, SecretStr
@@ -16,6 +17,7 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
+        env_ignore_empty=True,  # `KEY=` in .env means "not set", not an empty value
     )
 
     # --- Database ---
@@ -26,6 +28,11 @@ class Settings(BaseSettings):
     legifrance_oauth_url: str = "https://oauth.piste.gouv.fr"
     legifrance_client_id: str | None = None
     legifrance_client_secret: SecretStr | None = None
+
+    # --- Ingestion ---
+    data_dir: Path = Path("data")  # raw source snapshots written by `ingestion.cli fetch`
+    # Split chunks above this many tokens (by alinéa). None: one article = one chunk.
+    chunk_max_tokens: int | None = Field(default=None, ge=1)
 
     # --- LLM ---
     llm_provider: Literal["mistral", "ollama"] = "mistral"

@@ -1,9 +1,12 @@
 """Incremental, idempotent indexing into PostgreSQL (ARCHITECTURE §9.4).
 
-Compare each document's content hash with the database:
-new -> insert document and chunks; changed -> replace them; gone from the
-source -> delete. Unchanged documents are not touched, so re-running an
-ingestion on the same data changes nothing.
+Compare each document's fingerprint with the database: new -> insert document
+and chunks; changed -> replace them; gone from the source -> delete. Unchanged
+documents are not touched, so re-running an ingestion on the same data changes
+nothing.
+
+The stored fingerprint (``documents.content_hash``) covers the document *and* the
+chunks produced from it, so changing the chunking settings re-chunks what it affects.
 
 Embeddings are not computed here: new or modified chunks are stored with a NULL
 embedding, to be filled by the embedding step.
@@ -48,7 +51,14 @@ class SyncStats:
         return bool(self.added or self.updated or self.removed)
 
 
-def _document_values(doc: SourceDocument) -> dict[str, object]:
+def index_fingerprint(doc: SourceDocument, chunks: Sequence[Chunk]) -> str:
+    digest = hashlib.sha256(doc.content_hash.encode())
+    for chunk in chunks:
+        digest.update(f"\x00{chunk.index}\x00{chunk.content}".encode())
+    return digest.hexdigest()
+
+
+def _document_values(doc: SourceDocument, fingerprint: str) -> dict[str, object]:
     return {
         "source_type": doc.source_type,
         "source_id": doc.source_id,
@@ -58,14 +68,14 @@ def _document_values(doc: SourceDocument) -> dict[str, object]:
         "url": doc.url,
         "valid_from": doc.valid_from,
         "source_updated": doc.source_updated,
-        "content_hash": doc.content_hash,
+        "content_hash": fingerprint,
     }
 
 
-def _chunk_rows(document_id: object, doc: SourceDocument, chunker: Chunker) -> list[ChunkRow]:
+def _chunk_rows(document_id: object, chunks: Sequence[Chunk]) -> list[ChunkRow]:
     return [
         ChunkRow(document_id=document_id, chunk_index=c.index, content=c.content, embedding=None)
-        for c in chunker(doc)
+        for c in chunks
     ]
 
 
@@ -97,22 +107,24 @@ async def sync_documents(
 
     stats = SyncStats()
     for doc in documents:
+        chunks = chunker(doc)
+        fingerprint = index_fingerprint(doc, chunks)
         previous = existing.pop(doc.source_id, None)
         if previous is None:
-            row = Document(**_document_values(doc))
+            row = Document(**_document_values(doc, fingerprint))
             session.add(row)
             await session.flush()
-            session.add_all(_chunk_rows(row.id, doc, chunker))
+            session.add_all(_chunk_rows(row.id, chunks))
             stats.added += 1
-        elif previous[1] != doc.content_hash:
+        elif previous[1] != fingerprint:
             doc_id = previous[0]
             await session.execute(
                 update(Document)
                 .where(Document.id == doc_id)
-                .values(**_document_values(doc), ingested_at=func.now())
+                .values(**_document_values(doc, fingerprint), ingested_at=func.now())
             )
             await session.execute(delete(ChunkRow).where(ChunkRow.document_id == doc_id))
-            session.add_all(_chunk_rows(doc_id, doc, chunker))
+            session.add_all(_chunk_rows(doc_id, chunks))
             stats.updated += 1
         else:
             stats.unchanged += 1

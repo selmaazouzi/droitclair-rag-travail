@@ -44,3 +44,19 @@ def test_rejects_unknown_provider(monkeypatch: pytest.MonkeyPatch) -> None:
 
     with pytest.raises(ValueError, match="llm_provider"):
         Settings(_env_file=None)  # type: ignore[call-arg]
+
+
+def test_empty_values_mean_unset(monkeypatch: pytest.MonkeyPatch) -> None:
+    # .env.example ships keys with empty values, e.g. `CHUNK_MAX_TOKENS=`.
+    monkeypatch.setenv("CHUNK_MAX_TOKENS", "")
+    monkeypatch.setenv("MISTRAL_API_KEY", "")
+
+    settings = Settings(_env_file=None)  # type: ignore[call-arg]
+
+    assert settings.chunk_max_tokens is None
+    assert settings.mistral_api_key is None
+
+
+def test_chunk_max_tokens_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("CHUNK_MAX_TOKENS", "800")
+    assert Settings(_env_file=None).chunk_max_tokens == 800  # type: ignore[call-arg]

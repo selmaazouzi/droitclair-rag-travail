@@ -7,6 +7,7 @@ Le projet sert de démonstration d'ingénierie LLMOps de bout en bout : RAG hybr
 > ⚠️ Information juridique générale uniquement, pas de conseil personnalisé.
 
 Architecture et décisions : [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Rôle de chaque fichier de code : [docs/STRUCTURE.md](docs/STRUCTURE.md).
 
 ## État d'avancement
 
@@ -32,8 +33,10 @@ curl localhost:8000/health
 Ingestion des articles du Code du travail (identifiants PISTE requis dans `.env`) :
 
 ```bash
-uv run python -m ingestion.cli run --dry-run   # affiche ce qui changerait, sans écrire
-uv run python -m ingestion.cli run
+uv run python -m ingestion.cli fetch            # API -> data/.../articles_bruts/, puis nettoyage
+uv run python -m ingestion.cli clean            # articles_bruts/ -> articles/ (nettoyés)
+uv run python -m ingestion.cli run --dry-run    # affiche ce qui changerait, sans écrire
+uv run python -m ingestion.cli run              # articles/ -> PostgreSQL
 ```
 
 L'API peut aussi tourner dans Docker :

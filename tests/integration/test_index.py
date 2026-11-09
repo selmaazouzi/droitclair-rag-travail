@@ -9,6 +9,8 @@ from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app.db.models import Chunk, Document, IngestionRun
+from ingestion.chunking import Chunk as TextChunk
+from ingestion.chunking import chunk_document
 from ingestion.documents import SourceDocument
 from ingestion.index import SourceShrinkError, record_run, sync_documents
 
@@ -122,3 +124,16 @@ async def test_other_source_types_are_left_untouched(session: AsyncSession) -> N
 async def test_rejects_documents_outside_declared_source_types(session: AsyncSession) -> None:
     with pytest.raises(ValueError, match="unexpected source types"):
         await sync_documents(session, DOCS, source_types=["fiche_sp"])
+
+
+async def test_changing_the_chunker_rechunks_documents(session: AsyncSession) -> None:
+    await sync(session, DOCS)
+
+    def tagged(doc: SourceDocument) -> list[TextChunk]:
+        return [replace(c, content=c.content + "\n[v2]") for c in chunk_document(doc)]
+
+    stats = await sync_documents(session, DOCS, source_types=["article"], chunker=tagged)
+    await session.commit()
+
+    assert (stats.updated, stats.unchanged) == (3, 0)
+    assert (await chunk_contents(session, "L1237-19"))[0].endswith("[v2]")

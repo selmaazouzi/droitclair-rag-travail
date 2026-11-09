@@ -4,7 +4,7 @@ import hashlib
 import json
 from dataclasses import dataclass
 from datetime import date
-from typing import Literal
+from typing import Any, Literal, cast
 
 SourceType = Literal["article", "fiche_sp", "fiche_travail"]
 
@@ -21,6 +21,39 @@ class SourceDocument:
     nota: str | None = None
     valid_from: date | None = None
     source_updated: date | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Readable JSON form, used for the cleaned files in data/ (keys in reading order)."""
+        return {
+            "source_type": self.source_type,
+            "source_id": self.source_id,
+            "article_num": self.article_num,
+            "title": self.title,
+            "url": self.url,
+            "valid_from": self.valid_from.isoformat() if self.valid_from else None,
+            "source_updated": self.source_updated.isoformat() if self.source_updated else None,
+            "hierarchy": list(self.hierarchy),
+            "paragraphs": list(self.paragraphs),
+            "nota": self.nota,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "SourceDocument":
+        def as_date(value: str | None) -> date | None:
+            return date.fromisoformat(value) if value else None
+
+        return cls(
+            source_type=cast(SourceType, data["source_type"]),
+            source_id=data["source_id"],
+            title=data["title"],
+            hierarchy=tuple(data["hierarchy"]),
+            url=data["url"],
+            paragraphs=tuple(data["paragraphs"]),
+            article_num=data.get("article_num"),
+            nota=data.get("nota"),
+            valid_from=as_date(data.get("valid_from")),
+            source_updated=as_date(data.get("source_updated")),
+        )
 
     @property
     def hierarchy_path(self) -> str:

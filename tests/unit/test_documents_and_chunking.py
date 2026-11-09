@@ -49,6 +49,12 @@ def test_content_hash_changes_with_text_metadata_or_url() -> None:
     assert make_doc(valid_from=date(2020, 1, 1)).content_hash != base
 
 
+def test_dict_round_trip() -> None:
+    doc = make_doc(("A.", "B."), nota="Note")
+    assert SourceDocument.from_dict(doc.to_dict()) == doc
+    assert doc.to_dict()["valid_from"] == "2018-01-01"
+
+
 # --- Chunking -------------------------------------------------------------------
 
 
@@ -70,6 +76,13 @@ def test_short_article_is_one_chunk_with_header_and_nota() -> None:
         "B.",
         "NOTA : En vigueur en 2018.",
     ]
+
+
+def test_long_article_is_one_chunk_by_default() -> None:
+    paragraphs = tuple(f"Alinéa {i}. " + "mot " * 500 for i in range(10))  # ~6000 tokens
+    chunks = chunk_document(make_doc(paragraphs))
+    assert len(chunks) == 1
+    assert chunks[0].content.count("Alinéa ") == 10
 
 
 def test_long_article_is_split_on_alineas_with_one_alinea_overlap() -> None:
