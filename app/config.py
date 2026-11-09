@@ -21,6 +21,12 @@ class Settings(BaseSettings):
     # --- Database ---
     database_url: str = "postgresql+psycopg://chatbot:chatbot@localhost:5433/chatbot"
 
+    # --- Légifrance API (PISTE) — production by default; sandbox data differ from production ---
+    legifrance_api_url: str = "https://api.piste.gouv.fr/dila/legifrance/lf-engine-app"
+    legifrance_oauth_url: str = "https://oauth.piste.gouv.fr"
+    legifrance_client_id: str | None = None
+    legifrance_client_secret: SecretStr | None = None
+
     # --- LLM ---
     llm_provider: Literal["mistral", "ollama"] = "mistral"
     llm_model: str = "mistral-small-latest"

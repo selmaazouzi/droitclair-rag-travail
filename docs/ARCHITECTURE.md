@@ -172,10 +172,11 @@ droitclair-rag-travail/
 
 | Source | Contenu | Accès |
 |---|---|---|
-| Code du travail (LEGI) | Articles consolidés, en JSON | Dépôt GitHub `SocialGouv/legi-data`, fichier du texte `LEGITEXT000006072050` (extraction quotidienne de l'API Légifrance) |
+| Code du travail (LEGI) | Articles consolidés, en JSON | **API Légifrance** (portail PISTE, environnement de production), texte `LEGITEXT000006072050` : `POST /consult/legi/tableMatieres` (sommaire, `nature=CODE`) puis `POST /consult/getArticle` par article. OAuth *client credentials* (`LEGIFRANCE_CLIENT_ID` / `LEGIFRANCE_CLIENT_SECRET`), inscription gratuite |
 | Fiches « Vos droits et démarches » | Fiches vulgarisées service-public.fr, thème Travail | Jeu de données DILA sur data.gouv.fr (XML) ou dépôt `SocialGouv/fiches-vdd` |
 | Fiches du ministère du Travail | Fiches pratiques travail-emploi | Dépôt GitHub `SocialGouv/fiches-travail-data` (JSON) |
-| API Légifrance (optionnel) | Vérification ponctuelle de la version en vigueur | Portail PISTE, OAuth client credentials, inscription gratuite |
+
+Le dépôt `SocialGouv/legi-data` (copie JSON quotidienne du Code) a été écarté : c'est une extraction marquée « expérimentale, usage interne », sans garantie de maintenance ni de stabilité du format. L'environnement *sandbox* de PISTE n'est pas utilisé pour l'ingestion : ses données diffèrent de la production.
 
 **Important pour le développement :**
 
@@ -183,6 +184,24 @@ droitclair-rag-travail/
 - Le JSON du Code est un arbre (sections imbriquées contenant des articles). Le parser doit parcourir l'arbre récursivement pour reconstruire le **chemin hiérarchique** de chaque article (Partie > Livre > Titre > Chapitre > Section > Article).
 - Ne retenir que les articles dont l'état est « en vigueur ».
 - Licence Ouverte 2.0 : mentionner la source (DILA / Légifrance / service-public.fr) et la date de mise à jour dans l'interface et le README.
+
+### 7.1 Constats d'inspection de l'API Légifrance (5 novembre 2026)
+
+- **Sommaire** (`/consult/legi/tableMatieres`, ~19 Mo) : arbre récursif `sections[]` / `articles[]`, profondeur maximale 9, **sans le texte des articles** (`content` vide). Champs utiles : pour un article `id` (identifiant de version), `cid` (identifiant stable entre versions), `num`, `etat` (`VIGUEUR` ou `ABROGE`) ; pour une section `title`, `etat`, `dateModif` (permet de ne retélécharger que les sections modifiées).
+- Le code contient aussi des parties « ancienne » et une partie « Annexes » : seules « Partie législative » et « Partie réglementaire » sont concernées, et le filtre `etat` exclut les articles abrogés.
+- **Périmètre V1** : 686 articles en vigueur, tous de numéro distinct.
+
+  | Titre (Livre II) | Législatif | Réglementaire |
+  |---|---|---|
+  | II — Formation et exécution du contrat | 175 | 87 |
+  | III — Rupture du CDI | 221 | 133 |
+  | IV — CDD | 59 | 11 |
+
+- **Article** (`/consult/getArticle`, corps `{"id": <id de version>}`) : `texte` est du texte brut où les sauts d'alinéa sont perdus ; `texteHtml` sépare les alinéas par `<br/>` et sert donc au découpage par alinéa (9.3). `nota` contient des précisions d'entrée en vigueur. `context.titresTM` donne la hiérarchie de l'article.
+- Les dates d'article (`dateDebut`, `dateFin`) sont en millisecondes depuis l'epoch ; `32472144000000` (2999-01-01) signifie « sans date de fin ».
+- `documents.source_id` reçoit le `cid` de l'article : stable d'une version à l'autre, il permet à la ré-ingestion de détecter une **modification** plutôt qu'une suppression suivie d'un ajout.
+- `GET /consult/ping` répond `pong` en `text/plain` et renvoie une erreur 500 si la requête envoie `Accept: application/json`.
+- Débit : l'extraction de SocialGouv se limite à environ 20 requêtes par seconde avec relances automatiques. On adopte la même prudence (environ 700 appels pour le périmètre, soit moins d'une minute).
 
 ## 8. Modèle de données
 
@@ -215,7 +234,7 @@ CREATE TABLE chunks (
     document_id     UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
     chunk_index     INT NOT NULL,
     content         TEXT NOT NULL,            -- texte avec en-tête hiérarchique
-    embedding       vector(1024) NOT NULL,
+    embedding       vector(1024),             -- NULL tant que non calculé (§9.4)
     tsv             tsvector GENERATED ALWAYS AS (to_tsvector('french_unaccent', content)) STORED,
     UNIQUE (document_id, chunk_index)
 );
@@ -252,7 +271,9 @@ Le schéma est créé via des migrations Alembic, pas à la main.
 
 ## 9. Pipeline d'ingestion
 
-Commande : `python -m ingestion.cli run [--dry-run] [--only articles|fiches]`
+Commande : `python -m ingestion.cli run [--dry-run] [--only articles|fiches] [--date AAAA-MM-JJ]`
+
+`--dry-run` exécute toute la chaîne, y compris la comparaison avec la base, dans une transaction annulée à la fin : on voit ce qui changerait sans rien écrire. `--date` choisit la version des textes en vigueur à cette date (par défaut : aujourd'hui).
 
 ### 9.1 Filtrage du périmètre
 
@@ -285,16 +306,23 @@ Prévoir aussi `extract_article_refs(text: str) -> list[str]` qui trouve toutes 
 
 ```
 [Code du travail — Article L1237-19]
-Partie législative > Première partie > Livre II > Titre III > Chapitre VII > Section 4
-<texte de l'article>
+Partie législative > Première partie : Les relations individuelles de travail > Livre II : Le contrat de travail > Titre III : Rupture du contrat de travail à durée indéterminée > Chapitre VII : Autres cas de rupture > Section 4 : ...
+<un alinéa par ligne>
+NOTA : <note de l'article, s'il y en a une>
 ```
+
+- L'en-tête reprend les **titres complets** des sections : ils portent du sens (« Rupture d'un commun accord… ») utile aux recherches lexicale et vectorielle. À réévaluer en phase 4 si le bruit l'emporte.
+- La **note** (`nota`) de l'article est incluse : elle précise souvent les conditions d'entrée en vigueur.
+- Le tableau de L1235-3 (barème des indemnités) est restitué ligne par ligne, cellules séparées par « | ».
+- Le nombre de tokens est **estimé** (3,5 caractères par token) tant que le tokenizer de `bge-m3` n'est pas branché (phase 3). Résultat au 5 novembre 2026 : 686 articles → 696 chunks, 9 articles découpés, médiane d'environ 250 tokens par chunk.
 
 ### 9.4 Indexation incrémentale
 
 1. Calculer le `content_hash` de chaque document.
 2. Comparer avec la base : nouveau → insérer ; hash différent → remplacer document et chunks ; absent de la source → supprimer.
-3. Ne calculer les embeddings que pour les chunks nouveaux ou modifiés.
-4. Enregistrer les compteurs dans `ingestion_runs` et générer un `index_version`.
+3. Les chunks nouveaux ou modifiés sont enregistrés avec un embedding NULL ; l'étape d'embedding ne calcule que ceux-là.
+4. Enregistrer les compteurs dans `ingestion_runs` et générer un `index_version`. L'`index_version` est une empreinte de l'ensemble `(source_id, content_hash)` : un contenu identique donne la même version.
+5. **Garde-fou** : si une source renvoie moins de la moitié des documents déjà indexés pour son type, l'ingestion s'arrête sans rien supprimer (une panne de l'API ne doit pas vider l'index).
 
 ## 10. Pipeline de requête
 
@@ -452,6 +480,10 @@ Répartition cible (~100 questions) : période d'essai 15 %, CDD 20 %, rupture c
 
 ```
 DATABASE_URL=postgresql+psycopg://chatbot:chatbot@localhost:5433/chatbot
+LEGIFRANCE_API_URL=https://api.piste.gouv.fr/dila/legifrance/lf-engine-app
+LEGIFRANCE_OAUTH_URL=https://oauth.piste.gouv.fr
+LEGIFRANCE_CLIENT_ID=
+LEGIFRANCE_CLIENT_SECRET=
 LLM_PROVIDER=mistral            # mistral | ollama
 LLM_MODEL=mistral-small-latest
 LLM_REWRITE_MODEL=mistral-small-latest

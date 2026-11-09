@@ -12,8 +12,8 @@ Architecture et décisions : [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 | Phase | Statut |
 |---|---|
-| 0. Mise en place (outillage, base de données, migrations, CI) | ✅ en local — CI à valider au premier push |
-| 1. Données (ingestion du Code du travail et des fiches) | ⏳ |
+| 0. Mise en place (outillage, base de données, migrations, CI) | ✅ |
+| 1. Données (ingestion du Code du travail et des fiches) | 🟡 articles du Code faits (sans embeddings) ; fiches à faire |
 | 2 – 8 | — |
 
 ## Démarrage
@@ -27,6 +27,13 @@ docker compose -f infra/docker-compose.yml up -d     # PostgreSQL 16 + pgvector 
 uv run alembic upgrade head                          # schéma de la base
 uv run uvicorn app.main:app --reload                 # API sur http://localhost:8000
 curl localhost:8000/health
+```
+
+Ingestion des articles du Code du travail (identifiants PISTE requis dans `.env`) :
+
+```bash
+uv run python -m ingestion.cli run --dry-run   # affiche ce qui changerait, sans écrire
+uv run python -m ingestion.cli run
 ```
 
 L'API peut aussi tourner dans Docker :

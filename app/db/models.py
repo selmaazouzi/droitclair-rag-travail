@@ -80,7 +80,9 @@ class Chunk(Base):
     document_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("documents.id", ondelete="CASCADE"))
     chunk_index: Mapped[int] = mapped_column(Integer)
     content: Mapped[str] = mapped_column(Text)
-    embedding: Mapped[list[float]] = mapped_column(Vector(EMBEDDING_DIM))
+    embedding: Mapped[list[float] | None] = mapped_column(
+        Vector(EMBEDDING_DIM)
+    )  # NULL until embedded
     tsv: Mapped[str] = mapped_column(
         TSVECTOR,
         Computed(f"to_tsvector('{TEXT_SEARCH_CONFIG}', content)", persisted=True),
