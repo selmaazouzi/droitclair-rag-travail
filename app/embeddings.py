@@ -4,7 +4,10 @@ Used by the ingestion (documents) and, from phase 3, by the API (questions): bot
 sides must use the same model, otherwise their vectors are not comparable.
 """
 
+import logging
+import os
 from collections.abc import Iterable, Sequence
+from pathlib import Path
 from typing import Any, Protocol
 
 
@@ -29,6 +32,14 @@ class Embedder(Protocol):
     def count_tokens(self, text: str) -> int: ...
 
 
+def is_in_hf_cache(model_name: str) -> bool:
+    """True if ``model_name`` (e.g. "BAAI/bge-m3") is already in the Hugging Face cache."""
+    hf_home = Path(os.environ.get("HF_HOME", Path.home() / ".cache" / "huggingface"))
+    hub = Path(os.environ.get("HF_HUB_CACHE", hf_home / "hub"))
+    snapshots = hub / f"models--{model_name.replace('/', '--')}" / "snapshots"
+    return snapshots.is_dir() and any(snapshots.iterdir())
+
+
 def _to_lists(rows: Iterable[Any]) -> list[list[float]]:
     return [[float(x) for x in row] for row in rows]
 
@@ -42,10 +53,21 @@ class SentenceTransformerEmbedder:
     """
 
     def __init__(self, model_name: str, *, device: str | None = None, batch_size: int = 16):
+        # torch logs a harmless "Redirects are currently not supported in MacOs" at import.
+        logging.getLogger("torch.distributed.elastic.multiprocessing.redirects").setLevel(
+            logging.ERROR
+        )
+        cached = is_in_hf_cache(model_name)
+        if cached:
+            # Already downloaded: no network call to the Hugging Face Hub (faster start,
+            # works offline, no "unauthenticated requests" warning). Must be set before
+            # huggingface_hub is imported. Process-wide: models used alongside this one
+            # (e.g. the reranker, phase 4) must be in the cache too.
+            os.environ.setdefault("HF_HUB_OFFLINE", "1")
         # Heavy import (torch): only when a real model is needed. Not installed in CI.
         from sentence_transformers import SentenceTransformer
 
-        self._model = SentenceTransformer(model_name, device=device)
+        self._model = SentenceTransformer(model_name, device=device, local_files_only=cached)
         self._model_name = model_name
         self._batch_size = batch_size
         dimension = self._model.get_embedding_dimension()

@@ -46,6 +46,15 @@ L'API peut aussi tourner dans Docker :
 docker compose -f infra/docker-compose.yml --profile api up -d --build
 ```
 
+## Tester le chatbot à la main
+
+LLM local avec [Ollama](https://ollama.com) (`brew install ollama && brew services start ollama`, puis `ollama pull gemma4:12b`) et, dans `.env`, `LLM_PROVIDER=ollama` et `LLM_MODEL=gemma4:12b`.
+
+```bash
+uv run python -m app.cli ask "Combien de fois peut-on renouveler un CDD ?"
+uv run python -m app.cli chat --passages      # plusieurs questions, avec les passages trouvés
+```
+
 ## Qualité
 
 ```bash

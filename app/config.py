@@ -40,6 +40,12 @@ class Settings(BaseSettings):
     llm_rewrite_model: str = "mistral-small-latest"
     mistral_api_key: SecretStr | None = None
     ollama_base_url: str = "http://localhost:11434"
+    # Context window requested from Ollama (its default is too small for the sources).
+    ollama_num_ctx: int = Field(default=16384, ge=2048)
+    # Let reasoning models think before answering (much slower). Unset: model default.
+    ollama_think: bool | None = False
+    llm_temperature: float = Field(default=0.1, ge=0.0, le=2.0)
+    llm_timeout_s: float = Field(default=300.0, gt=0)
 
     # --- Retrieval models ---
     embedding_model: str = "BAAI/bge-m3"

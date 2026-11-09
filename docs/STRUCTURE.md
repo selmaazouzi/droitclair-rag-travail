@@ -3,7 +3,7 @@
 > Description de chaque fichier de code **existant**, tenue à jour à chaque création ou suppression de fichier.
 > La structure **cible** du projet (fichiers prévus dans les phases suivantes) est décrite dans [ARCHITECTURE.md §6](ARCHITECTURE.md#6-structure-du-dépôt).
 
-Dernière mise à jour : 9 novembre 2026 (vectorisation des chunks avec `bge-m3`).
+Dernière mise à jour : 9 novembre 2026 (chaîne question -> réponse avec un LLM local, commande de test manuel).
 
 ## Vue d'ensemble
 
@@ -23,9 +23,21 @@ droitclair-rag-travail/
 | Fichier | Rôle |
 |---|---|
 | `app/__init__.py` | Marque le dossier comme package Python. |
+| `app/cli.py` | Test manuel du chatbot : `python -m app.cli ask "question"` ou `chat` (plusieurs questions). Affiche la réponse en direct, les sources citées, les avertissements de citation, la latence et les tokens ; `--passages` montre les passages donnés au modèle. |
+| `app/pipeline.py` | Orchestration d'une question (version phase 3) : vectorise la question, cherche les passages les plus proches, construit le prompt avec les sources numérotées, diffuse la réponse du LLM, vérifie les citations. Émet des événements (passages, morceaux de texte, résultat final) réutilisables par la future route `/chat`. |
 | `app/main.py` | Crée l'application FastAPI (`create_app`), branche les routes, ferme le pool de connexions à l'arrêt. Point d'entrée : `uvicorn app.main:app`. |
 | `app/config.py` | Tous les réglages, lus depuis les variables d'environnement et `.env` (Pydantic Settings) : base de données, identifiants Légifrance, dossier `data/`, découpage, modèle d'embedding (nom, appareil, taille des lots), LLM, paramètres de recherche, Langfuse. Une variable vide (`KEY=`) vaut « non définie ». |
 | `app/embeddings.py` | Interface `Embedder` (texte -> vecteur) et son implémentation locale `SentenceTransformerEmbedder` (`bge-m3`, 1024 dimensions, GPU Apple détecté automatiquement). Partagée par l'ingestion (documents) et, en phase 3, par l'API (questions). |
+| `app/llm/__init__.py` | Point d'entrée des clients LLM : `create_llm_client` choisit Ollama ou Mistral selon `LLM_PROVIDER`. |
+| `app/llm/base.py` | Interface commune `LLMClient` (réponse diffusée morceau par morceau) et types : message, morceau, consommation de tokens, erreur. |
+| `app/llm/ollama.py` | Client Ollama (modèle local, `/api/chat`) : fixe la taille de contexte, désactive par défaut la « réflexion » des modèles qui en font (`OLLAMA_THINK`), messages clairs si Ollama n'est pas lancé ou si le modèle n'est pas téléchargé. |
+| `app/llm/mistral.py` | Client de l'API Mistral (`/v1/chat/completions`, flux SSE), pour plus tard. |
+| `app/prompts/__init__.py` | Chargement des prompts versionnés (`load_prompt("system_v1")`). |
+| `app/prompts/system_v1.txt` | Prompt système v1 (ARCHITECTURE §10.2) : répondre uniquement à partir des sources, citer [n], ne rien inventer. |
+| `app/retrieval/__init__.py` | Package de la recherche de passages. |
+| `app/retrieval/dense.py` | Recherche vectorielle pgvector : les passages les plus proches de la question (similarité cosinus), seulement parmi ceux vectorisés par le même modèle. |
+| `app/guardrails/__init__.py` | Package des garde-fous. |
+| `app/guardrails/output.py` | Vérification des citations [n] (valides, inexistantes, réponse sans citation), retrait des citations inexistantes, texte d'avertissement. |
 | `app/api/__init__.py` | Package des routes HTTP. |
 | `app/api/health.py` | `GET /health` : vérifie la connexion à la base, répond 200 ou 503. |
 | `app/db/__init__.py` | Package base de données. |
@@ -69,7 +81,7 @@ Quatre étapes : `fetch` (API -> `articles_bruts/`), `clean` (`articles_bruts/` 
 | Fichier | Rôle |
 |---|---|
 | `tests/__init__.py`, `tests/unit/__init__.py`, `tests/integration/__init__.py` | Marqueurs de packages. |
-| `tests/fakes.py` | Doublures de test partagées : `FakeEmbedder`, faux modèle d'embedding déterministe (sac de mots), pour tester sans télécharger de modèle. |
+| `tests/fakes.py` | Doublures de test partagées : `FakeEmbedder` (faux modèle d'embedding, sac de mots) et `FakeLLM` (réponse prédéfinie diffusée mot à mot), pour tester sans modèle ni API. |
 | `tests/fixtures/legifrance/article_L1237-19.json` | Vraie réponse `getArticle` (champs réduits), utilisée sans appeler l'API. |
 | `tests/unit/test_config.py` | Valeurs par défaut, surcharge par l'environnement, secrets masqués, variables vides. |
 | `tests/unit/test_health.py` | `/health` avec une fausse session : base disponible (200) ou en panne (503). |
@@ -77,11 +89,15 @@ Quatre étapes : `fetch` (API -> `articles_bruts/`), `clean` (`articles_bruts/` 
 | `tests/unit/test_html_text.py` | Conversion HTML -> alinéas (paragraphes, `<br/>`, liens, tableau de L1235-3). |
 | `tests/unit/test_documents_and_chunking.py` | Empreinte, conversion JSON, en-tête et découpage des chunks. |
 | `tests/unit/test_code_travail.py` | Filtre du périmètre, parcours du sommaire, lecture d'un article réel, `fetch` / `clean` / chargement avec une fausse API. |
+| `tests/unit/test_citations.py` | Détection des citations ([2], [1, 3], hors limites, texte entre crochets ignoré) et retrait des citations inexistantes. |
+| `tests/unit/test_prompts_and_messages.py` | Chargement du prompt `system_v1` et construction du message avec les sources numérotées. |
+| `tests/unit/test_llm_clients.py` | Clients Ollama et Mistral face à de faux serveurs : format du flux, consommation, erreurs, Ollama non lancé ; choix du fournisseur. |
 | `tests/unit/test_legifrance_client.py` | Client API avec un faux serveur : jeton, relances, renouvellement après 401, erreurs. |
 | `tests/integration/conftest.py` | Base de test réelle (`TEST_DATABASE_URL`, nom en `_test` obligatoire) : remise à zéro puis migrations. |
 | `tests/integration/helpers.py` | Lance la commande Alembic contre la base de test. |
 | `tests/integration/test_schema.py` | Schéma créé par les migrations : extensions, tables, recherche sans accents, recherche vectorielle, cascade, `alembic check`, aller-retour des migrations. |
 | `tests/integration/test_embed.py` | Vectorisation avec le faux modèle : une seule fois par chunk, recalcul des seuls chunks modifiés, recalcul complet si le modèle change, recherche du plus proche voisin, dimension incorrecte refusée. |
+| `tests/integration/test_pipeline.py` | Chaîne complète sur une vraie base avec faux modèles : passages trouvés, réponse diffusée, sources citées, citation inexistante retirée, réponse sans citation signalée. |
 | `tests/integration/test_index.py` | Ingestion incrémentale : premier passage, relance sans effet, modification, suppression, garde-fou, changement de découpage. |
 
 ## Configuration du dépôt

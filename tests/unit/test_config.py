@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from app.config import Settings
@@ -60,3 +62,12 @@ def test_empty_values_mean_unset(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_chunk_max_tokens_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("CHUNK_MAX_TOKENS", "800")
     assert Settings(_env_file=None).chunk_max_tokens == 800  # type: ignore[call-arg]
+
+
+def test_hf_cache_detection(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.embeddings import is_in_hf_cache
+
+    monkeypatch.setenv("HF_HUB_CACHE", str(tmp_path))
+    assert not is_in_hf_cache("BAAI/bge-m3")
+    (tmp_path / "models--BAAI--bge-m3" / "snapshots" / "abc123").mkdir(parents=True)
+    assert is_in_hf_cache("BAAI/bge-m3")

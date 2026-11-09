@@ -3,7 +3,9 @@
 import hashlib
 import math
 import re
-from collections.abc import Sequence
+from collections.abc import AsyncIterator, Sequence
+
+from app.llm import ChatMessage, LLMChunk, Usage
 
 _WORD = re.compile(r"\w+")
 
@@ -40,3 +42,25 @@ class FakeEmbedder:
 
     def count_tokens(self, text: str) -> int:
         return len(_WORD.findall(text))
+
+
+class FakeLLM:
+    """Streams a canned answer word by word and records the messages it received."""
+
+    def __init__(self, answer: str, model: str = "fake-llm") -> None:
+        self.model = model
+        self._answer = answer
+        self.received: list[list[ChatMessage]] = []
+        self.closed = False
+
+    async def stream(
+        self, messages: Sequence[ChatMessage], *, temperature: float
+    ) -> AsyncIterator[LLMChunk]:
+        self.received.append(list(messages))
+        words = self._answer.split(" ")
+        for i, word in enumerate(words):
+            yield LLMChunk(text=word if i == 0 else f" {word}")
+        yield LLMChunk(usage=Usage(prompt_tokens=100, completion_tokens=len(words)))
+
+    async def aclose(self) -> None:
+        self.closed = True

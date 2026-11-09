@@ -60,7 +60,7 @@ Compléter avec les **fiches pratiques** officielles sur ces thèmes, qui couvre
 | Accès BDD | SQLAlchemy 2 (async) + psycopg 3, migrations Alembic | |
 | Embeddings | `BAAI/bge-m3` via sentence-transformers | Multilingue, dimension 1024, exécutable sur CPU |
 | Reranker | `BAAI/bge-reranker-v2-m3` | Cross-encoder multilingue |
-| LLM | API Mistral par défaut ; Ollama en développement local | Derrière l'interface `LLMClient` |
+| LLM | API Mistral par défaut ; Ollama en développement local | Derrière l'interface `LLMClient`. En local : `gemma4:12b` (Google Gemma 4, 12 Md de paramètres, ~8 Go), choisi avec **llmfit** comme meilleur modèle officiel pour la machine de développement (Apple M5, 24 Go) en réservant ~11 Go à `bge-m3`, PostgreSQL et le système |
 | Interface | Chainlit | Next.js envisageable plus tard, branché sur la même API |
 | Observabilité | Langfuse | Cloud (offre gratuite) ou auto-hébergé via le docker-compose officiel |
 | Évaluation | RAGAS + LLM-as-judge + métriques maison | |
@@ -511,6 +511,10 @@ LLM_MODEL=mistral-small-latest
 LLM_REWRITE_MODEL=mistral-small-latest
 MISTRAL_API_KEY=
 OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_NUM_CTX=16384           # contexte demandé à Ollama (son défaut est trop petit)
+OLLAMA_THINK=false              # pas de « réflexion » cachée avant la réponse (10x plus rapide)
+LLM_TEMPERATURE=0.1
+LLM_TIMEOUT_S=300
 EMBEDDING_MODEL=BAAI/bge-m3
 EMBEDDING_DEVICE=               # vide : détection automatique (mps, cuda ou cpu)
 EMBEDDING_BATCH_SIZE=16
@@ -545,7 +549,7 @@ Ne passer à la phase suivante que lorsque le critère de fin est atteint.
 | 0. Mise en place | Dépôt, `uv`, ruff, mypy, pytest, docker-compose (Postgres + pgvector), Alembic, CI lint + tests | `docker compose up` démarre la base ; la CI passe |
 | 1. Données | Inspection des sources, parsers, filtrage, normalisation, chunking, indexation incrémentale | Rapport du nombre d'articles par titre ; une requête SQL retrouve L1237-19 ; relancer l'ingestion ne modifie rien |
 | 2. Jeu de test | Format JSONL, script de validation du fichier | ~100 questions validées et versionnées |
-| 3. Version minimale | Recherche vectorielle seule, prompt v1, `/chat` en SSE, Chainlit, Langfuse de base, déploiement | Réponse correcte avec citation sur une URL publique ; premier rapport d'évaluation (référence) |
+| 3. Version minimale (commencée avant la fin de la phase 2, à la demande du porteur, pour des tests manuels ; critère de fin inchangé) | Recherche vectorielle seule, prompt v1, `/chat` en SSE, Chainlit, Langfuse de base, déploiement | Réponse correcte avec citation sur une URL publique ; premier rapport d'évaluation (référence) |
 | 4. Qualité du retrieval | Lexical + RRF, puis rerank, puis reformulation | Un rapport d'évaluation par ajout, gains documentés |
 | 5. Évaluation en CI | RAGAS, métriques maison, comparaison à `main` | La CI bloque une régression |
 | 6. Garde-fous | Section 12 complète | > 90 % de bon comportement sur les catégories hors périmètre et litiges |
