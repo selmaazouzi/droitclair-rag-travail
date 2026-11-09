@@ -92,7 +92,8 @@ async def on_message(message: cl.Message) -> None:
                     case "meta":
                         cl.user_session.set("conversation_id", event.data["conversation_id"])
                     case "passages":
-                        async with cl.Step(name="Articles trouvés", type="retrieval") as step:
+                        name = f"{len(event.data)} articles du Code trouvés"
+                        async with cl.Step(name=name, type="retrieval") as step:
                             step.output = _format_passages(event.data)
                     case "token":
                         await answer.stream_token(event.data["text"])

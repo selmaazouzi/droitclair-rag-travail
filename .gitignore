@@ -33,6 +33,9 @@ CLAUDE.local.md
 # Chainlit: generated files, except the UI configuration
 **/.chainlit/*
 !ui/.chainlit/config.toml
+!ui/.chainlit/translations/
+ui/.chainlit/translations/*
+!ui/.chainlit/translations/fr-FR.json
 .files/
 
 # OS / editors
