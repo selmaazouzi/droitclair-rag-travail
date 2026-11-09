@@ -7,13 +7,13 @@ import pytest
 
 from app.config import Settings
 from app.llm import ChatMessage, LLMChunk, LLMError, create_llm_client
-from app.llm.mistral import MistralClient
 from app.llm.ollama import OllamaClient
+from app.llm.openrouter import OpenRouterClient
 
 MESSAGES = [ChatMessage("system", "S"), ChatMessage("user", "Q")]
 
 
-async def collect(client: OllamaClient | MistralClient) -> list[LLMChunk]:
+async def collect(client: OllamaClient | OpenRouterClient) -> list[LLMChunk]:
     try:
         return [chunk async for chunk in client.stream(MESSAGES, temperature=0.1)]
     finally:
@@ -90,39 +90,63 @@ async def test_ollama_not_running_gives_a_hint() -> None:
         await collect(client)
 
 
-# --- Mistral: server-sent events ------------------------------------------------
+# --- OpenRouter: server-sent events ---------------------------------------------
 
 
-async def test_mistral_streams_sse_with_usage() -> None:
-    events = [
+def sse(*events: object) -> bytes:
+    lines = [": OPENROUTER PROCESSING\n\n"]  # keep-alive comment, must be ignored
+    lines += [f"data: {json.dumps(e)}\n\n" for e in events]
+    return ("".join(lines) + "data: [DONE]\n\n").encode()
+
+
+async def test_openrouter_streams_sse_with_usage_and_cost() -> None:
+    body = sse(
         {"choices": [{"delta": {"role": "assistant", "content": "Deux "}}]},
         {"choices": [{"delta": {"content": [{"type": "text", "text": "fois"}]}}]},
+        {"choices": [{"delta": {"content": " [1]."}}]},
         {
-            "choices": [{"delta": {"content": " [1]."}}],
-            "usage": {"prompt_tokens": 700, "completion_tokens": 5},
+            "choices": [{"delta": {"content": ""}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 1700, "completion_tokens": 300, "cost": 0.00026},
         },
-    ]
-    sse = "".join(f"data: {json.dumps(e)}\n\n" for e in events) + "data: [DONE]\n\n"
+    )
     seen: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         seen.append(request)
-        return httpx.Response(200, content=sse.encode())
+        return httpx.Response(200, content=body)
 
-    client = MistralClient(
-        api_key="k", model="mistral-small-latest", transport=httpx.MockTransport(handler)
+    client = OpenRouterClient(
+        api_key="sk-or-test",
+        model="mistralai/mistral-small-3.2-24b-instruct",
+        base_url="https://openrouter.test/api/v1",
+        transport=httpx.MockTransport(handler),
     )
     chunks = await collect(client)
 
     assert "".join(c.text for c in chunks) == "Deux fois [1]."
-    assert chunks[-1].usage is not None and chunks[-1].usage.completion_tokens == 5
-    assert seen[0].headers["Authorization"] == "Bearer k"
-    assert seen[0].url.path == "/v1/chat/completions"
+    usage = chunks[-1].usage
+    assert usage is not None and (usage.prompt_tokens, usage.completion_tokens) == (1700, 300)
+    assert usage.cost_usd == 0.00026
+    request = seen[0]
+    assert request.url.path == "/api/v1/chat/completions"
+    assert request.headers["Authorization"] == "Bearer sk-or-test"
+    assert request.headers["X-Title"] == "DroitClair"
+    sent = json.loads(request.content)
+    assert sent["model"] == "mistralai/mistral-small-3.2-24b-instruct"
+    assert sent["stream"] is True and sent["usage"] == {"include": True}
 
 
-async def test_mistral_http_error() -> None:
-    transport = httpx.MockTransport(lambda r: httpx.Response(401, text="Unauthorized"))
-    client = MistralClient(api_key="bad", model="m", transport=transport)
+async def test_openrouter_error_after_stream_started() -> None:
+    body = sse({"error": {"code": 502, "message": "Provider returned error"}})
+    transport = httpx.MockTransport(lambda r: httpx.Response(200, content=body))
+    client = OpenRouterClient(api_key="k", model="m", transport=transport)
+    with pytest.raises(LLMError, match="Provider returned error"):
+        await collect(client)
+
+
+async def test_openrouter_http_error() -> None:
+    transport = httpx.MockTransport(lambda r: httpx.Response(401, text="No auth credentials found"))
+    client = OpenRouterClient(api_key="bad", model="m", transport=transport)
     with pytest.raises(LLMError, match="HTTP 401"):
         await collect(client)
 
@@ -130,14 +154,22 @@ async def test_mistral_http_error() -> None:
 # --- Factory ------------------------------------------------------------------------
 
 
-def test_factory_builds_the_configured_provider(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_factory_builds_ollama(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("LLM_PROVIDER", "ollama")
-    monkeypatch.setenv("LLM_MODEL", "gemma4:12b")
+    monkeypatch.setenv("OLLAMA_MODEL", "gemma4:12b")
     client = create_llm_client(Settings(_env_file=None))  # type: ignore[call-arg]
     assert isinstance(client, OllamaClient) and client.model == "gemma4:12b"
 
 
-def test_factory_requires_a_mistral_key(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("LLM_PROVIDER", "mistral")
-    with pytest.raises(LLMError, match="MISTRAL_API_KEY"):
+def test_factory_builds_openrouter(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LLM_PROVIDER", "openrouter")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+    client = create_llm_client(Settings(_env_file=None))  # type: ignore[call-arg]
+    assert isinstance(client, OpenRouterClient)
+    assert client.model == "mistralai/mistral-small-3.2-24b-instruct"
+
+
+def test_factory_requires_an_openrouter_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LLM_PROVIDER", "openrouter")
+    with pytest.raises(LLMError, match="OPENROUTER_API_KEY"):
         create_llm_client(Settings(_env_file=None))  # type: ignore[call-arg]

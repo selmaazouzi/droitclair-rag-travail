@@ -48,7 +48,10 @@ docker compose -f infra/docker-compose.yml --profile api up -d --build
 
 ## Tester le chatbot à la main
 
-LLM local avec [Ollama](https://ollama.com) (`brew install ollama && brew services start ollama`, puis `ollama pull gemma4:12b`) et, dans `.env`, `LLM_PROVIDER=ollama` et `LLM_MODEL=gemma4:12b`.
+Deux fournisseurs de LLM, au choix dans `.env` (`LLM_PROVIDER`) :
+
+- **OpenRouter** (`openrouter`, par défaut) : modèles hébergés, payants au token. Clé à créer sur [openrouter.ai/keys](https://openrouter.ai/keys), à mettre dans `OPENROUTER_API_KEY` ; modèle dans `OPENROUTER_MODEL`.
+- **Ollama** (`ollama`) : modèle local, gratuit. `brew install ollama && brew services start ollama`, puis `ollama pull gemma4:12b` ; modèle dans `OLLAMA_MODEL`.
 
 ```bash
 uv run python -m app.cli ask "Combien de fois peut-on renouveler un CDD ?"

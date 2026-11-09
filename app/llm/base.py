@@ -21,6 +21,7 @@ class ChatMessage:
 class Usage:
     prompt_tokens: int | None = None
     completion_tokens: int | None = None
+    cost_usd: float | None = None  # reported by paid APIs (OpenRouter); None for local models
 
 
 @dataclass(frozen=True, slots=True)

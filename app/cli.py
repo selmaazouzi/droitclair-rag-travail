@@ -57,6 +57,8 @@ def _print_footer(result: AnswerResult, show_passages: bool) -> None:
     if result.usage:
         u = result.usage
         tokens = f" | tokens {u.prompt_tokens} entrée / {u.completion_tokens} sortie"
+        if u.cost_usd is not None:
+            tokens += f" | coût {u.cost_usd:.5f} $"
     print(
         f"\n{DIM}{result.notice}\n"
         f"{result.model} | prompt {result.prompt_version} | "

@@ -3,7 +3,7 @@
 > Description de chaque fichier de code **existant**, tenue à jour à chaque création ou suppression de fichier.
 > La structure **cible** du projet (fichiers prévus dans les phases suivantes) est décrite dans [ARCHITECTURE.md §6](ARCHITECTURE.md#6-structure-du-dépôt).
 
-Dernière mise à jour : 9 novembre 2026 (chaîne question -> réponse avec un LLM local, commande de test manuel).
+Dernière mise à jour : 9 novembre 2026 (fournisseur OpenRouter à la place de l'API Mistral).
 
 ## Vue d'ensemble
 
@@ -28,10 +28,10 @@ droitclair-rag-travail/
 | `app/main.py` | Crée l'application FastAPI (`create_app`), branche les routes, ferme le pool de connexions à l'arrêt. Point d'entrée : `uvicorn app.main:app`. |
 | `app/config.py` | Tous les réglages, lus depuis les variables d'environnement et `.env` (Pydantic Settings) : base de données, identifiants Légifrance, dossier `data/`, découpage, modèle d'embedding (nom, appareil, taille des lots), LLM, paramètres de recherche, Langfuse. Une variable vide (`KEY=`) vaut « non définie ». |
 | `app/embeddings.py` | Interface `Embedder` (texte -> vecteur) et son implémentation locale `SentenceTransformerEmbedder` (`bge-m3`, 1024 dimensions, GPU Apple détecté automatiquement). Partagée par l'ingestion (documents) et, en phase 3, par l'API (questions). |
-| `app/llm/__init__.py` | Point d'entrée des clients LLM : `create_llm_client` choisit Ollama ou Mistral selon `LLM_PROVIDER`. |
-| `app/llm/base.py` | Interface commune `LLMClient` (réponse diffusée morceau par morceau) et types : message, morceau, consommation de tokens, erreur. |
+| `app/llm/__init__.py` | Point d'entrée des clients LLM : `create_llm_client` choisit OpenRouter ou Ollama selon `LLM_PROVIDER`. |
+| `app/llm/base.py` | Interface commune `LLMClient` (réponse diffusée morceau par morceau) et types : message, morceau, consommation de tokens et coût, erreur. |
 | `app/llm/ollama.py` | Client Ollama (modèle local, `/api/chat`) : fixe la taille de contexte, désactive par défaut la « réflexion » des modèles qui en font (`OLLAMA_THINK`), messages clairs si Ollama n'est pas lancé ou si le modèle n'est pas téléchargé. |
-| `app/llm/mistral.py` | Client de l'API Mistral (`/v1/chat/completions`, flux SSE), pour plus tard. |
+| `app/llm/openrouter.py` | Client OpenRouter (modèles hébergés, `/chat/completions`, flux SSE) : récupère tokens et coût de chaque appel, gère les erreurs survenant en cours de flux. |
 | `app/prompts/__init__.py` | Chargement des prompts versionnés (`load_prompt("system_v1")`). |
 | `app/prompts/system_v1.txt` | Prompt système v1 (ARCHITECTURE §10.2) : répondre uniquement à partir des sources, citer [n], ne rien inventer. |
 | `app/retrieval/__init__.py` | Package de la recherche de passages. |
@@ -91,7 +91,7 @@ Quatre étapes : `fetch` (API -> `articles_bruts/`), `clean` (`articles_bruts/` 
 | `tests/unit/test_code_travail.py` | Filtre du périmètre, parcours du sommaire, lecture d'un article réel, `fetch` / `clean` / chargement avec une fausse API. |
 | `tests/unit/test_citations.py` | Détection des citations ([2], [1, 3], hors limites, texte entre crochets ignoré) et retrait des citations inexistantes. |
 | `tests/unit/test_prompts_and_messages.py` | Chargement du prompt `system_v1` et construction du message avec les sources numérotées. |
-| `tests/unit/test_llm_clients.py` | Clients Ollama et Mistral face à de faux serveurs : format du flux, consommation, erreurs, Ollama non lancé ; choix du fournisseur. |
+| `tests/unit/test_llm_clients.py` | Clients Ollama et OpenRouter face à de faux serveurs : format du flux, tokens et coût, erreurs, Ollama non lancé ; choix du fournisseur. |
 | `tests/unit/test_legifrance_client.py` | Client API avec un faux serveur : jeton, relances, renouvellement après 401, erreurs. |
 | `tests/integration/conftest.py` | Base de test réelle (`TEST_DATABASE_URL`, nom en `_test` obligatoire) : remise à zéro puis migrations. |
 | `tests/integration/helpers.py` | Lance la commande Alembic contre la base de test. |

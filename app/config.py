@@ -35,11 +35,15 @@ class Settings(BaseSettings):
     chunk_max_tokens: int | None = Field(default=None, ge=1)
 
     # --- LLM ---
-    llm_provider: Literal["mistral", "ollama"] = "mistral"
-    llm_model: str = "mistral-small-latest"
-    llm_rewrite_model: str = "mistral-small-latest"
-    mistral_api_key: SecretStr | None = None
+    llm_provider: Literal["openrouter", "ollama"] = "openrouter"
+    # OpenRouter: hosted models, pay per token (https://openrouter.ai/models)
+    openrouter_api_key: SecretStr | None = None
+    openrouter_model: str = "mistralai/mistral-small-3.2-24b-instruct"
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    # Ollama: local models (model chosen with llmfit for the development machine)
+    ollama_model: str = "gemma4:12b"
     ollama_base_url: str = "http://localhost:11434"
+    llm_rewrite_model: str | None = None  # query rewriting (phase 4); None: answer model
     # Context window requested from Ollama (its default is too small for the sources).
     ollama_num_ctx: int = Field(default=16384, ge=2048)
     # Let reasoning models think before answering (much slower). Unset: model default.

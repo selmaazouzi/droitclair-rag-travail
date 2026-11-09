@@ -60,7 +60,7 @@ Compléter avec les **fiches pratiques** officielles sur ces thèmes, qui couvre
 | Accès BDD | SQLAlchemy 2 (async) + psycopg 3, migrations Alembic | |
 | Embeddings | `BAAI/bge-m3` via sentence-transformers | Multilingue, dimension 1024, exécutable sur CPU |
 | Reranker | `BAAI/bge-reranker-v2-m3` | Cross-encoder multilingue |
-| LLM | API Mistral par défaut ; Ollama en développement local | Derrière l'interface `LLMClient`. En local : `gemma4:12b` (Google Gemma 4, 12 Md de paramètres, ~8 Go), choisi avec **llmfit** comme meilleur modèle officiel pour la machine de développement (Apple M5, 24 Go) en réservant ~11 Go à `bge-m3`, PostgreSQL et le système |
+| LLM | **OpenRouter** par défaut (une clé, de nombreux modèles hébergés ; défaut : `mistralai/mistral-small-3.2-24b-instruct`) ; Ollama en local | Derrière l'interface `LLMClient`. OpenRouter remplace l'API Mistral directe : il donne accès aux modèles Mistral et à beaucoup d'autres pour les comparer en évaluation, et renvoie le coût de chaque appel. En local : `gemma4:12b` (Google Gemma 4, 12 Md de paramètres, ~8 Go), choisi avec **llmfit** comme meilleur modèle officiel pour la machine de développement (Apple M5, 24 Go) en réservant ~11 Go à `bge-m3`, PostgreSQL et le système |
 | Interface | Chainlit | Next.js envisageable plus tard, branché sur la même API |
 | Observabilité | Langfuse | Cloud (offre gratuite) ou auto-hébergé via le docker-compose officiel |
 | Évaluation | RAGAS + LLM-as-judge + métriques maison | |
@@ -138,7 +138,7 @@ droitclair-rag-travail/
 │   │   └── output.py
 │   ├── llm/
 │   │   ├── base.py              # Protocol LLMClient
-│   │   ├── mistral.py
+│   │   ├── openrouter.py
 │   │   └── ollama.py
 │   ├── prompts/
 │   │   ├── system_v1.txt
@@ -506,10 +506,11 @@ LEGIFRANCE_API_URL=https://api.piste.gouv.fr/dila/legifrance/lf-engine-app
 LEGIFRANCE_OAUTH_URL=https://oauth.piste.gouv.fr
 LEGIFRANCE_CLIENT_ID=
 LEGIFRANCE_CLIENT_SECRET=
-LLM_PROVIDER=mistral            # mistral | ollama
-LLM_MODEL=mistral-small-latest
-LLM_REWRITE_MODEL=mistral-small-latest
-MISTRAL_API_KEY=
+LLM_PROVIDER=openrouter         # openrouter | ollama
+OPENROUTER_API_KEY=
+OPENROUTER_MODEL=mistralai/mistral-small-3.2-24b-instruct
+OLLAMA_MODEL=gemma4:12b
+LLM_REWRITE_MODEL=              # reformulation (phase 4) ; vide : même modèle que les réponses
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_NUM_CTX=16384           # contexte demandé à Ollama (son défaut est trop petit)
 OLLAMA_THINK=false              # pas de « réflexion » cachée avant la réponse (10x plus rapide)

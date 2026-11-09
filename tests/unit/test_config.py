@@ -8,7 +8,8 @@ from app.config import Settings
 def test_defaults_match_architecture() -> None:
     settings = Settings(_env_file=None)  # type: ignore[call-arg]
 
-    assert settings.llm_provider == "mistral"
+    assert settings.llm_provider == "openrouter"
+    assert settings.ollama_model == "gemma4:12b"
     assert settings.embedding_model == "BAAI/bge-m3"
     assert settings.reranker_model == "BAAI/bge-reranker-v2-m3"
     assert settings.retrieval_top_k_lexical == 30
@@ -32,13 +33,13 @@ def test_environment_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_secrets_are_not_leaked_in_repr(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("MISTRAL_API_KEY", "sk-very-secret")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-very-secret")
 
     settings = Settings(_env_file=None)  # type: ignore[call-arg]
 
     assert "sk-very-secret" not in repr(settings)
-    assert settings.mistral_api_key is not None
-    assert settings.mistral_api_key.get_secret_value() == "sk-very-secret"
+    assert settings.openrouter_api_key is not None
+    assert settings.openrouter_api_key.get_secret_value() == "sk-very-secret"
 
 
 def test_rejects_unknown_provider(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -51,12 +52,12 @@ def test_rejects_unknown_provider(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_empty_values_mean_unset(monkeypatch: pytest.MonkeyPatch) -> None:
     # .env.example ships keys with empty values, e.g. `CHUNK_MAX_TOKENS=`.
     monkeypatch.setenv("CHUNK_MAX_TOKENS", "")
-    monkeypatch.setenv("MISTRAL_API_KEY", "")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "")
 
     settings = Settings(_env_file=None)  # type: ignore[call-arg]
 
     assert settings.chunk_max_tokens is None
-    assert settings.mistral_api_key is None
+    assert settings.openrouter_api_key is None
 
 
 def test_chunk_max_tokens_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
