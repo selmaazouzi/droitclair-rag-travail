@@ -149,7 +149,9 @@ droitclair-rag-travail/
 │   │   └── session.py
 │   └── tracing.py               # intégration Langfuse
 ├── ui/
-│   └── chainlit_app.py          # client de l'API, aucune logique métier
+│   ├── chainlit_app.py          # client de l'API, aucune logique métier
+│   ├── sse_client.py            # lecture du flux SSE (testable sans Chainlit)
+│   └── chainlit.md              # page d'accueil de l'interface
 ├── eval/
 │   ├── golden_set.jsonl
 │   ├── run_eval.py
@@ -415,11 +417,14 @@ Requête :
 | Événement | Contenu |
 |---|---|
 | `meta` | `{ "conversation_id": "...", "message_id": "...", "trace_id": "..." }` |
+| `passages` | `[{ "ref": 1, "title": "...", "article_num": "...", "url": "...", "score": 0.61, "excerpt": "..." }]` : passages donnés au modèle, pour le diagnostic et le test manuel |
 | `token` | `{ "text": "..." }` (répété) |
 | `sources` | `[{ "ref": 1, "title": "...", "article_num": "L1221-19", "url": "...", "updated": "..." }]` |
 | `notice` | Disclaimer ou redirection éventuelle |
-| `done` | `{ "latency_ms": ..., "usage": {...} }` |
-| `error` | `{ "code": "...", "message": "..." }` |
+| `done` | `{ "latency_ms": ..., "usage": { "prompt_tokens", "completion_tokens", "cost_usd" }, "model": "...", "prompt_version": "...", "answer": "...", "invalid_citations": [...], "uncited_answer": false }` — `answer` est le texte final, citations inexistantes retirées : l'interface remplace le texte diffusé par celui-ci |
+| `error` | `{ "code": "llm_unavailable" \| "llm_error" \| "internal_error", "message": "..." }` |
+
+La question et la réponse sont enregistrées dans `conversations` / `messages` (avec les sources citées) ; une réponse en échec n'est pas enregistrée. Un `conversation_id` inconnu renvoie 404, une question vide ou de plus de 2 000 caractères 422. Le modèle d'embedding est chargé à la première question puis réutilisé.
 
 ### `POST /feedback`
 

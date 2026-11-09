@@ -53,6 +53,15 @@ Deux fournisseurs de LLM, au choix dans `.env` (`LLM_PROVIDER`) :
 - **OpenRouter** (`openrouter`, par défaut) : modèles hébergés, payants au token. Clé à créer sur [openrouter.ai/keys](https://openrouter.ai/keys), à mettre dans `OPENROUTER_API_KEY` ; modèle dans `OPENROUTER_MODEL`.
 - **Ollama** (`ollama`) : modèle local, gratuit. `brew install ollama && brew services start ollama`, puis `ollama pull gemma4:12b` ; modèle dans `OLLAMA_MODEL`.
 
+Dans le navigateur, avec l'interface Chainlit (deux terminaux) :
+
+```bash
+uv run uvicorn app.main:app --reload                       # API sur http://localhost:8000
+cd ui && uv run chainlit run chainlit_app.py --port 8001    # interface sur http://localhost:8001
+```
+
+Ou dans le terminal :
+
 ```bash
 uv run python -m app.cli ask "Combien de fois peut-on renouveler un CDD ?"
 uv run python -m app.cli chat --passages      # plusieurs questions, avec les passages trouvés

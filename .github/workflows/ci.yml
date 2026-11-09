@@ -21,7 +21,7 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
-      - run: uv sync --locked --no-group ml  # no torch in CI: models are faked
+      - run: uv sync --locked --no-group ml --no-group ui  # no torch/chainlit in CI: models are faked
       - run: uv run ruff format --check .
       - run: uv run ruff check .
       - run: uv run mypy
@@ -50,5 +50,5 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
-      - run: uv sync --locked --no-group ml  # no torch in CI: models are faked
+      - run: uv sync --locked --no-group ml --no-group ui  # no torch/chainlit in CI: models are faked
       - run: uv run pytest

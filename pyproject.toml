@@ -26,10 +26,13 @@ dev = [
 ml = [
     "sentence-transformers>=6.2.0",
 ]
+ui = [
+    "chainlit>=2.12.0",
+]
 
 [tool.uv]
-# `ml` (sentence-transformers + torch) is installed locally by default; CI skips it.
-default-groups = ["dev", "ml"]
+# `ml` (sentence-transformers + torch) and `ui` (chainlit) are installed locally by default; CI skips them.
+default-groups = ["dev", "ml", "ui"]
 
 [build-system]
 requires = ["hatchling"]
