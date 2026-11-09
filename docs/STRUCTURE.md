@@ -3,7 +3,7 @@
 > Description de chaque fichier de code **existant**, tenue à jour à chaque création ou suppression de fichier.
 > La structure **cible** du projet (fichiers prévus dans les phases suivantes) est décrite dans [ARCHITECTURE.md §6](ARCHITECTURE.md#6-structure-du-dépôt).
 
-Dernière mise à jour : 9 novembre 2026 (route `POST /chat` en SSE et interface Chainlit).
+Dernière mise à jour : 9 novembre 2026 (identité visuelle de l'interface : thème vert, logo, nom « DroitClair chatbot »).
 
 ## Vue d'ensemble
 
@@ -73,6 +73,11 @@ Quatre étapes : `fetch` (API -> `articles_bruts/`), `clean` (`articles_bruts/` 
 | `ui/chainlit_app.py` | Interface Chainlit : envoie la question à `POST /chat`, affiche la réponse en direct, les articles trouvés (étape dépliable), les sources cliquables, l'avertissement, le modèle, la durée et le coût. Aucune logique métier. Lancement : `cd ui && uv run chainlit run chainlit_app.py --port 8001`. |
 | `ui/sse_client.py` | Lecture d'un flux Server-Sent Events (lignes `event:` / `data:`), séparée de Chainlit pour être testée sans lui. |
 | `ui/chainlit.md` | Page d'accueil affichée par Chainlit (présentation, avertissement juridique). |
+| `ui/.chainlit/config.toml` | Configuration de Chainlit : nom « DroitClair chatbot », interface en français, description, envoi de fichiers désactivé. Seul fichier versionné du dossier `.chainlit/` (le reste est généré). |
+| `ui/public/theme.json` | Couleurs de l'interface (vert au lieu du rose par défaut), en clair et en sombre. |
+| `ui/public/logo_light.svg`, `ui/public/logo_dark.svg` | Logo « DroitClair chatbot » (balance de la justice), pour les thèmes clair et sombre. |
+| `ui/public/favicon.svg` | Icône de l'onglet du navigateur. |
+| `ui/public/avatars/droitclair_chatbot.svg` | Avatar affiché à côté des réponses (nom de fichier = nom de l'assistant). |
 
 ## `infra/` — infrastructure
 
@@ -120,6 +125,6 @@ Quatre étapes : `fetch` (API -> `articles_bruts/`), `clean` (`articles_bruts/` 
 | `pyproject.toml` | Dépendances (groupes `ml` : sentence-transformers et torch, `ui` : Chainlit ; installés en local, absents de la CI), version de Python, configuration de ruff, mypy, pytest et Alembic. |
 | `uv.lock` | Versions exactes de toutes les dépendances (généré par `uv`). |
 | `.env.example` | Modèle du fichier `.env` : toutes les variables, sans secret. |
-| `.gitignore` | Fichiers exclus de git : `.env`, `data/`, caches, `CLAUDE.md`, `.claude/`. |
+| `.gitignore` | Fichiers exclus de git : `.env`, `data/`, caches, `CLAUDE.md`, `.claude/`, fichiers générés par Chainlit (sauf `ui/.chainlit/config.toml`). |
 | `.dockerignore` | Fichiers exclus de l'image Docker. |
 | `.github/workflows/ci.yml` | CI GitHub Actions : lint et types, puis tests sur une base pgvector, sans les groupes `ml` et `ui` (modèles simulés). |

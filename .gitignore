@@ -30,8 +30,9 @@ CLAUDE.local.md
 *.log
 .ipynb_checkpoints/
 
-# Chainlit
-.chainlit/
+# Chainlit: generated files, except the UI configuration
+**/.chainlit/*
+!ui/.chainlit/config.toml
 .files/
 
 # OS / editors
