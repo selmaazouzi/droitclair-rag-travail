@@ -37,6 +37,7 @@ uv run python -m ingestion.cli fetch            # API -> data/.../articles_bruts
 uv run python -m ingestion.cli clean            # articles_bruts/ -> articles/ (nettoyés)
 uv run python -m ingestion.cli run --dry-run    # affiche ce qui changerait, sans écrire
 uv run python -m ingestion.cli run              # articles/ -> PostgreSQL
+uv run python -m ingestion.cli embed            # vecteurs bge-m3 (modèle local, ~2 Go au 1er lancement)
 ```
 
 L'API peut aussi tourner dans Docker :

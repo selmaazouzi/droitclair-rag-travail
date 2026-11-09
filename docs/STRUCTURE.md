@@ -3,7 +3,7 @@
 > Description de chaque fichier de code **existant**, tenue à jour à chaque création ou suppression de fichier.
 > La structure **cible** du projet (fichiers prévus dans les phases suivantes) est décrite dans [ARCHITECTURE.md §6](ARCHITECTURE.md#6-structure-du-dépôt).
 
-Dernière mise à jour : 9 novembre 2026 (phase 1 : ingestion des articles du Code du travail).
+Dernière mise à jour : 9 novembre 2026 (vectorisation des chunks avec `bge-m3`).
 
 ## Vue d'ensemble
 
@@ -24,26 +24,28 @@ droitclair-rag-travail/
 |---|---|
 | `app/__init__.py` | Marque le dossier comme package Python. |
 | `app/main.py` | Crée l'application FastAPI (`create_app`), branche les routes, ferme le pool de connexions à l'arrêt. Point d'entrée : `uvicorn app.main:app`. |
-| `app/config.py` | Tous les réglages, lus depuis les variables d'environnement et `.env` (Pydantic Settings) : base de données, identifiants Légifrance, dossier `data/`, découpage, LLM, paramètres de recherche, Langfuse. Une variable vide (`KEY=`) vaut « non définie ». |
+| `app/config.py` | Tous les réglages, lus depuis les variables d'environnement et `.env` (Pydantic Settings) : base de données, identifiants Légifrance, dossier `data/`, découpage, modèle d'embedding (nom, appareil, taille des lots), LLM, paramètres de recherche, Langfuse. Une variable vide (`KEY=`) vaut « non définie ». |
+| `app/embeddings.py` | Interface `Embedder` (texte -> vecteur) et son implémentation locale `SentenceTransformerEmbedder` (`bge-m3`, 1024 dimensions, GPU Apple détecté automatiquement). Partagée par l'ingestion (documents) et, en phase 3, par l'API (questions). |
 | `app/api/__init__.py` | Package des routes HTTP. |
 | `app/api/health.py` | `GET /health` : vérifie la connexion à la base, répond 200 ou 503. |
 | `app/db/__init__.py` | Package base de données. |
-| `app/db/models.py` | Modèles SQLAlchemy des tables `documents`, `chunks`, `conversations`, `messages`, `ingestion_runs`. Doivent rester identiques aux migrations (vérifié par `alembic check` en test). |
+| `app/db/models.py` | Modèles SQLAlchemy des tables `documents`, `chunks` (texte, vecteur et modèle qui l'a produit), `conversations`, `messages`, `ingestion_runs`. Doivent rester identiques aux migrations (vérifié par `alembic check` en test). |
 | `app/db/session.py` | Moteur et sessions PostgreSQL asynchrones, créés au premier usage ; `get_session` fournit une session par requête HTTP. |
 
 ## `ingestion/` — chaîne d'ingestion
 
-Trois étapes : `fetch` (API -> `articles_bruts/`), `clean` (`articles_bruts/` -> `articles/`), `run` (`articles/` -> PostgreSQL).
+Quatre étapes : `fetch` (API -> `articles_bruts/`), `clean` (`articles_bruts/` -> `articles/`), `run` (`articles/` -> PostgreSQL), `embed` (chunks -> vecteurs).
 
 | Fichier | Rôle |
 |---|---|
 | `ingestion/__init__.py` | Package de l'ingestion. |
-| `ingestion/cli.py` | Commandes `python -m ingestion.cli fetch / clean / run` : enchaîne les étapes, affiche le rapport (articles par titre, statistiques des chunks), gère `--dry-run`. |
+| `ingestion/cli.py` | Commandes `python -m ingestion.cli fetch / clean / run / embed` : enchaîne les étapes, affiche le rapport (articles par titre, statistiques des chunks), gère `--dry-run`. |
 | `ingestion/documents.py` | `SourceDocument` : format commun d'un document, quelle que soit la source. Calcule le chemin hiérarchique et l'empreinte du contenu ; se convertit vers et depuis le JSON des fichiers nettoyés (`to_dict` / `from_dict`). |
 | `ingestion/normalize.py` | Normalisation des numéros d'articles (`"L. 1237-19"` -> `"L1237-19"`), extraction des références dans un texte libre, candidats L/R/D pour un numéro sans lettre. |
 | `ingestion/filters.py` | Périmètre V1 : articles L, R, D 122x à 124x, en vigueur. |
 | `ingestion/html_text.py` | Conversion du HTML Légifrance en alinéas de texte brut (paragraphes, sauts de ligne, liens, tableau ligne par ligne). |
 | `ingestion/chunking.py` | Découpage en chunks avec en-tête (source, numéro, position dans le code) ; un article = un chunk par défaut, découpage par alinéa optionnel (`CHUNK_MAX_TOKENS`). |
+| `ingestion/embed.py` | Calcule les vecteurs manquants : chunks sans embedding (nouveaux ou modifiés) ou produits par un autre modèle ; enregistre par lots, signale les chunks trop longs pour le modèle. |
 | `ingestion/index.py` | Synchronisation incrémentale avec PostgreSQL : ajoute, met à jour ou supprime selon l'empreinte, enregistre chaque exécution dans `ingestion_runs`, refuse de vider l'index si la source rétrécit brutalement. |
 | `ingestion/sources/__init__.py` | Package des sources. |
 | `ingestion/sources/legifrance.py` | Client de l'API Légifrance (PISTE) : jeton OAuth, limitation du débit, relances automatiques ; routes `tableMatieres` (sommaire) et `getArticle`. |
@@ -60,12 +62,14 @@ Trois étapes : `fetch` (API -> `articles_bruts/`), `clean` (`articles_bruts/` -
 | `infra/alembic/script.py.mako` | Modèle utilisé pour générer une nouvelle migration. |
 | `infra/alembic/versions/20261105_0001_initial_schema.py` | Migration 1 : extensions `vector` et `unaccent`, recherche plein texte `french_unaccent`, les 5 tables et leurs index. |
 | `infra/alembic/versions/20261105_0002_nullable_embedding.py` | Migration 2 : `chunks.embedding` devient facultatif (rempli plus tard par l'étape d'embedding). |
+| `infra/alembic/versions/20261109_0003_chunk_embedding_model.py` | Migration 3 : colonne `chunks.embedding_model`, le modèle qui a produit chaque vecteur. |
 
 ## `tests/`
 
 | Fichier | Rôle |
 |---|---|
 | `tests/__init__.py`, `tests/unit/__init__.py`, `tests/integration/__init__.py` | Marqueurs de packages. |
+| `tests/fakes.py` | Doublures de test partagées : `FakeEmbedder`, faux modèle d'embedding déterministe (sac de mots), pour tester sans télécharger de modèle. |
 | `tests/fixtures/legifrance/article_L1237-19.json` | Vraie réponse `getArticle` (champs réduits), utilisée sans appeler l'API. |
 | `tests/unit/test_config.py` | Valeurs par défaut, surcharge par l'environnement, secrets masqués, variables vides. |
 | `tests/unit/test_health.py` | `/health` avec une fausse session : base disponible (200) ou en panne (503). |
@@ -77,15 +81,16 @@ Trois étapes : `fetch` (API -> `articles_bruts/`), `clean` (`articles_bruts/` -
 | `tests/integration/conftest.py` | Base de test réelle (`TEST_DATABASE_URL`, nom en `_test` obligatoire) : remise à zéro puis migrations. |
 | `tests/integration/helpers.py` | Lance la commande Alembic contre la base de test. |
 | `tests/integration/test_schema.py` | Schéma créé par les migrations : extensions, tables, recherche sans accents, recherche vectorielle, cascade, `alembic check`, aller-retour des migrations. |
+| `tests/integration/test_embed.py` | Vectorisation avec le faux modèle : une seule fois par chunk, recalcul des seuls chunks modifiés, recalcul complet si le modèle change, recherche du plus proche voisin, dimension incorrecte refusée. |
 | `tests/integration/test_index.py` | Ingestion incrémentale : premier passage, relance sans effet, modification, suppression, garde-fou, changement de découpage. |
 
 ## Configuration du dépôt
 
 | Fichier | Rôle |
 |---|---|
-| `pyproject.toml` | Dépendances, version de Python, configuration de ruff, mypy, pytest et Alembic. |
+| `pyproject.toml` | Dépendances (groupe `ml` : sentence-transformers et torch, installé en local, absent de la CI), version de Python, configuration de ruff, mypy, pytest et Alembic. |
 | `uv.lock` | Versions exactes de toutes les dépendances (généré par `uv`). |
 | `.env.example` | Modèle du fichier `.env` : toutes les variables, sans secret. |
 | `.gitignore` | Fichiers exclus de git : `.env`, `data/`, caches, `CLAUDE.md`, `.claude/`. |
 | `.dockerignore` | Fichiers exclus de l'image Docker. |
-| `.github/workflows/ci.yml` | CI GitHub Actions : lint et types, puis tests sur une base pgvector. |
+| `.github/workflows/ci.yml` | CI GitHub Actions : lint et types, puis tests sur une base pgvector, sans le groupe `ml` (modèles simulés). |

@@ -236,6 +236,7 @@ CREATE TABLE chunks (
     chunk_index     INT NOT NULL,
     content         TEXT NOT NULL,            -- texte avec en-tête hiérarchique
     embedding       vector(1024),             -- NULL tant que non calculé (§9.4)
+    embedding_model TEXT,                     -- modèle qui a produit le vecteur
     tsv             tsvector GENERATED ALWAYS AS (to_tsvector('french_unaccent', content)) STORED,
     UNIQUE (document_id, chunk_index)
 );
@@ -278,6 +279,7 @@ L'ingestion se fait en trois étapes, une par dossier ; seule la première utili
 python -m ingestion.cli fetch [--date AAAA-MM-JJ] [--force]   # API -> articles_bruts/ (puis clean)
 python -m ingestion.cli clean                                 # articles_bruts/ -> articles/
 python -m ingestion.cli run [--dry-run] [--only articles]     # articles/ -> PostgreSQL
+python -m ingestion.cli embed [--batch-size N]                # chunks -> vecteurs (modèle local)
 ```
 
 Instantané dans `data/legifrance/code_travail/` :
@@ -340,7 +342,7 @@ NOTA : <note de l'article, s'il y en a une>
 
 1. Calculer l'empreinte de chaque document (`documents.content_hash`) : SHA-256 du document normalisé **et des chunks qui en sont tirés**. Un changement de réglage du découpage modifie donc l'empreinte et provoque le re-découpage des documents concernés.
 2. Comparer avec la base : nouveau → insérer ; hash différent → remplacer document et chunks ; absent de la source → supprimer.
-3. Les chunks nouveaux ou modifiés sont enregistrés avec un embedding NULL ; l'étape d'embedding ne calcule que ceux-là.
+3. Les chunks nouveaux ou modifiés sont enregistrés avec un embedding NULL. L'étape `embed` calcule les vecteurs des chunks sans embedding **ou** dont `embedding_model` diffère du modèle configuré : changer `EMBEDDING_MODEL` recalcule tout, sans jamais mélanger deux modèles. Les vecteurs sont normalisés (similarité cosinus) et enregistrés par lots : une exécution interrompue reprend où elle s'était arrêtée. Le groupe de dépendances `ml` (sentence-transformers, torch) n'est pas installé en CI, où les modèles sont simulés.
 4. Enregistrer les compteurs dans `ingestion_runs` et générer un `index_version`. L'`index_version` est une empreinte de l'ensemble `(source_id, content_hash)` : un contenu identique donne la même version.
 5. **Garde-fou** : si une source renvoie moins de la moitié des documents déjà indexés pour son type, l'ingestion s'arrête sans rien supprimer (une panne de l'API ne doit pas vider l'index).
 
@@ -510,6 +512,8 @@ LLM_REWRITE_MODEL=mistral-small-latest
 MISTRAL_API_KEY=
 OLLAMA_BASE_URL=http://localhost:11434
 EMBEDDING_MODEL=BAAI/bge-m3
+EMBEDDING_DEVICE=               # vide : détection automatique (mps, cuda ou cpu)
+EMBEDDING_BATCH_SIZE=16
 RERANKER_MODEL=BAAI/bge-reranker-v2-m3
 RETRIEVAL_TOP_K_LEXICAL=30
 RETRIEVAL_TOP_K_DENSE=30

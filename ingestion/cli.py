@@ -1,8 +1,9 @@
-"""Ingestion entry point (ARCHITECTURE §9). Three steps, one folder each:
+"""Ingestion entry point (ARCHITECTURE §9):
 
     python -m ingestion.cli fetch [--date YYYY-MM-DD] [--force]   # API -> articles_bruts/ (+ clean)
     python -m ingestion.cli clean                                 # articles_bruts/ -> articles/
     python -m ingestion.cli run [--dry-run] [--only articles]     # articles/ -> PostgreSQL
+    python -m ingestion.cli embed [--batch-size N]                # chunks -> vectors (local model)
 
 Only `fetch` uses the network. `clean` is run by `fetch`; run it alone after
 changing the cleaning code.
@@ -25,8 +26,10 @@ from pathlib import Path
 
 from app.config import get_settings
 from app.db.session import dispose_engine, get_sessionmaker
+from app.embeddings import SentenceTransformerEmbedder
 from ingestion.chunking import approx_token_count, chunk_document
 from ingestion.documents import SourceDocument, SourceType
+from ingestion.embed import embed_pending
 from ingestion.index import Chunker, record_run, sync_documents
 from ingestion.sources.code_travail import (
     CleanSummary,
@@ -137,6 +140,27 @@ async def run(only: str | None, dry_run: bool) -> int:
     return 0
 
 
+async def embed(batch_size: int) -> int:
+    settings = get_settings()
+    logger.info("Loading %s (first use downloads it, ~2 GB)", settings.embedding_model)
+    embedder = SentenceTransformerEmbedder(
+        settings.embedding_model,
+        device=settings.embedding_device,
+        batch_size=settings.embedding_batch_size,
+    )
+    logger.info("Model loaded on %s", embedder.device)
+    try:
+        summary = await embed_pending(get_sessionmaker(), embedder, batch_size=batch_size)
+    finally:
+        await dispose_engine()
+    print(
+        f"embedded={summary.embedded} already_done={summary.already_done} "
+        f"longest_chunk={summary.max_tokens} tokens truncated={summary.truncated} "
+        f"model={embedder.model_name}"
+    )
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m ingestion.cli")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -158,6 +182,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     run_parser.add_argument("--dry-run", action="store_true", help="report changes, write nothing")
     run_parser.add_argument("--only", choices=sorted(SOURCES), help="ingest a single source")
 
+    embed_parser = commands.add_parser("embed", help="compute missing chunk embeddings")
+    embed_parser.add_argument(
+        "--batch-size", type=int, default=32, help="chunks per database commit (default: 32)"
+    )
+
     args = parser.parse_args(argv)
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
@@ -168,6 +197,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return asyncio.run(fetch(args.date or datetime.now(UTC).date(), args.force))
     if args.command == "clean":
         return clean()
+    if args.command == "embed":
+        return asyncio.run(embed(args.batch_size))
     return asyncio.run(run(args.only, args.dry_run))
 
 

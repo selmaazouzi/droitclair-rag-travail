@@ -43,6 +43,8 @@ class Settings(BaseSettings):
 
     # --- Retrieval models ---
     embedding_model: str = "BAAI/bge-m3"
+    embedding_device: str | None = None  # None: auto (Apple GPU "mps", "cuda" or "cpu")
+    embedding_batch_size: int = Field(default=16, ge=1)
     reranker_model: str = "BAAI/bge-reranker-v2-m3"
 
     # --- Retrieval parameters ---

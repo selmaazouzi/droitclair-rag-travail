@@ -23,6 +23,13 @@ dev = [
     "pytest-asyncio>=1.4.1.post1",
     "ruff>=0.17.3",
 ]
+ml = [
+    "sentence-transformers>=6.2.0",
+]
+
+[tool.uv]
+# `ml` (sentence-transformers + torch) is installed locally by default; CI skips it.
+default-groups = ["dev", "ml"]
 
 [build-system]
 requires = ["hatchling"]
@@ -65,7 +72,7 @@ files = ["app", "ingestion"]
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["pgvector.*"]
+module = ["pgvector.*", "sentence_transformers.*"]
 ignore_missing_imports = true
 
 [tool.pydantic-mypy]
